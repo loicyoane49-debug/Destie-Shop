@@ -1,3 +1,5 @@
+// Clé API ImgBB (Indiquez la vôtre pour l'envoi de photos)
+const IMGBB_API_KEY = "VOTRE_CLE_IMGBB_ICI";
 const SELLER_EMAIL = "primodestiem0@gmail.com";
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -13,16 +15,19 @@ function setupAuthListener() {
     const headerActions = document.getElementById('header-actions');
     if (!headerActions) return;
 
-    if (user && user.email === SELLER_EMAIL) {
+    // Si l'utilisateur est connecté et est la vendeuse
+    if (user && user.email.toLowerCase() === SELLER_EMAIL.toLowerCase()) {
       headerActions.innerHTML = `
-        <button class="btn" onclick="openAddProductModal()"><i class="fa-solid fa-plus"></i> Ajouter</button>
+        <button class="btn" style="background:#d97706; color:white; border:none; padding:0.5rem 0.8rem; border-radius:6px; margin-right:0.5rem; font-weight:bold;" onclick="openAddProductModal()"><i class="fa-solid fa-plus"></i> + Ajouter</button>
         <button class="btn btn-secondary" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> Déconnexion</button>
       `;
     } else if (user) {
+      // Client connecté
       headerActions.innerHTML = `
         <button class="btn btn-secondary" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> Déconnexion</button>
       `;
     } else {
+      // Non connecté
       headerActions.innerHTML = `
         <button class="btn btn-secondary" onclick="openLoginModal()"><i class="fa-solid fa-user"></i> Connexion</button>
       `;
@@ -30,7 +35,29 @@ function setupAuthListener() {
   });
 }
 
-// Chargement des articles
+// Navigation entre les onglets du bas
+window.switchView = function(viewName) {
+  const container = document.getElementById('app-content');
+  if (!container) return;
+
+  // Mise à jour de la classe active sur la barre de navigation
+  const navItems = document.querySelectorAll('.bottom-nav .nav-item');
+  navItems.forEach(item => item.classList.remove('active'));
+
+  if (viewName === 'catalog') {
+    if (navItems[0]) navItems[0].classList.add('active');
+    container.innerHTML = `<div class="product-grid" id="product-list"></div>`;
+    loadCatalog();
+  } else if (viewName === 'reservations') {
+    if (navItems[1]) navItems[1].classList.add('active');
+    loadReservationsView();
+  } else if (viewName === 'profile') {
+    if (navItems[2]) navItems[2].classList.add('active');
+    loadProfileView();
+  }
+};
+
+// VUE CATALOGUE
 async function loadCatalog() {
   const productList = document.getElementById('product-list');
   if (!productList) return;
@@ -60,7 +87,7 @@ async function loadCatalog() {
           </span>
           <h3 class="product-title">${p.title || 'Article'}</h3>
           <p class="product-price">${p.price ? p.price.toLocaleString('fr-FR') : 0} XAF</p>
-          ${!p.isReserved ? `<button class="btn" onclick="alert('Article réservé !')">Réserver</button>` : ''}
+          ${!p.isReserved ? `<button class="btn" style="width:100%; margin-top:0.5rem;" onclick="alert('Réservation enregistrée !')">Réserver</button>` : ''}
         </div>
       `;
       productList.appendChild(card);
@@ -70,7 +97,57 @@ async function loadCatalog() {
   }
 }
 
-// Fenêtre modale de connexion
+// VUE RÉSERVATIONS
+function loadReservationsView() {
+  const container = document.getElementById('app-content');
+  const user = firebase.auth().currentUser;
+
+  if (!user) {
+    container.innerHTML = `
+      <div style="text-align: center; padding: 3rem 1rem;">
+        <i class="fa-solid fa-box-archive" style="font-size: 3rem; color: #9ca3af; margin-bottom: 1rem;"></i>
+        <h3>Mes Réservations</h3>
+        <p style="color: #6b7280; margin-top: 0.5rem;">Veuillez vous connecter pour voir vos réservations.</p>
+        <button class="btn" style="margin-top: 1rem;" onclick="openLoginModal()">Se connecter</button>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = `
+    <div style="padding: 1rem;">
+      <h3 style="margin-bottom: 1rem;">Vos réservations</h3>
+      <p style="color: #6b7280;">Aucune réservation enregistrée pour le moment.</p>
+    </div>
+  `;
+}
+
+// VUE PROFIL
+function loadProfileView() {
+  const container = document.getElementById('app-content');
+  const user = firebase.auth().currentUser;
+
+  if (user) {
+    container.innerHTML = `
+      <div style="padding: 1.5rem; background: white; border-radius: 8px; margin: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin-bottom: 0.5rem;">Profil Utilisateur</h3>
+        <p style="color: #4b5563;">Connecté en tant que : <strong>${user.email}</strong></p>
+        <button class="btn btn-secondary" style="margin-top: 1.5rem;" onclick="logout()">Se déconnecter</button>
+      </div>
+    `;
+  } else {
+    container.innerHTML = `
+      <div style="text-align: center; padding: 3rem 1rem;">
+        <i class="fa-solid fa-user-gear" style="font-size: 3rem; color: #9ca3af; margin-bottom: 1rem;"></i>
+        <h3>Mon Profil</h3>
+        <p style="color: #6b7280; margin-top: 0.5rem;">Vous n'êtes pas connecté.</p>
+        <button class="btn" style="margin-top: 1rem;" onclick="openLoginModal()">Se connecter</button>
+      </div>
+    `;
+  }
+}
+
+// POPUP DE CONNEXION
 window.openLoginModal = function() {
   let modal = document.getElementById('login-modal');
   if (!modal) {
@@ -101,13 +178,12 @@ window.openLoginModal = function() {
   `;
 };
 
-// Soumission de la connexion
 window.submitLogin = function() {
   const email = document.getElementById('auth-email').value;
   const pass = document.getElementById('auth-pass').value;
   const errDiv = document.getElementById('auth-error');
 
-  errDiv.textContent = "Vérification en cours...";
+  errDiv.textContent = "Vérification...";
 
   firebase.auth().signInWithEmailAndPassword(email, pass)
     .then(() => {
@@ -119,7 +195,6 @@ window.submitLogin = function() {
     });
 };
 
-// Déconnexion
 window.logout = function() {
   firebase.auth().signOut().then(() => {
     alert("Déconnecté !");
@@ -127,7 +202,6 @@ window.logout = function() {
   });
 };
 
-// Fermer les fenêtres
 window.closeModal = function() {
   const modal = document.getElementById('login-modal');
   if (modal) modal.remove();
@@ -135,7 +209,7 @@ window.closeModal = function() {
   if (addModal) addModal.remove();
 };
 
-// Fenêtre d'ajout d'article
+// POPUP AJOUT DE PRODUIT (AVEC TELECHARGEMENT DE PHOTO)
 window.openAddProductModal = function() {
   let modal = document.getElementById('add-modal');
   if (!modal) {
@@ -146,22 +220,22 @@ window.openAddProductModal = function() {
 
   modal.innerHTML = `
     <div style="position: fixed; top:0; left:0; right:0; bottom:0; background: rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center; z-index:9999; padding: 1rem;">
-      <div style="background: #1f2937; color: white; padding: 1.5rem; border-radius: 8px; width: 100%; max-width: 350px;">
-        <h3 style="margin-bottom: 1rem; color: #f59e0b;">Publier un article</h3>
+      <div style="background: #1f2937; color: white; padding: 1.5rem; border-radius: 8px; width: 100%; max-width: 380px;">
+        <h3 style="margin-bottom: 1rem; color: #f59e0b;">Nouveau Vêtement</h3>
         
-        <label style="display:block; font-size:0.85rem; margin-bottom: 0.25rem;">Nom du vêtement</label>
-        <input type="text" id="add-title" placeholder="ex: Ensemble Pagne" style="width:100%; padding: 0.5rem; margin-bottom: 1rem; border-radius:4px; border:1px solid #4b5563; background:#374151; color:white;">
+        <label style="display:block; font-size:0.85rem; margin-bottom: 0.25rem;">Nom de l'article</label>
+        <input type="text" id="add-title" placeholder="ex: Ensemble Pagne" style="width:100%; padding: 0.5rem; margin-bottom: 0.8rem; border-radius:4px; border:1px solid #4b5563; background:#374151; color:white;">
         
         <label style="display:block; font-size:0.85rem; margin-bottom: 0.25rem;">Prix (XAF)</label>
-        <input type="number" id="add-price" placeholder="15000" style="width:100%; padding: 0.5rem; margin-bottom: 1rem; border-radius:4px; border:1px solid #4b5563; background:#374151; color:white;">
+        <input type="number" id="add-price" placeholder="15000" style="width:100%; padding: 0.5rem; margin-bottom: 0.8rem; border-radius:4px; border:1px solid #4b5563; background:#374151; color:white;">
         
-        <label style="display:block; font-size:0.85rem; margin-bottom: 0.25rem;">Lien de la photo (.jpg ou .png)</label>
-        <input type="url" id="add-img" placeholder="https://..." style="width:100%; padding: 0.5rem; margin-bottom: 1rem; border-radius:4px; border:1px solid #4b5563; background:#374151; color:white;">
+        <label style="display:block; font-size:0.85rem; margin-bottom: 0.25rem;">Choisir la photo (Galerie/Caméra)</label>
+        <input type="file" id="add-file" accept="image/*" style="width:100%; padding: 0.5rem; margin-bottom: 1rem; border-radius:4px; border:1px solid #4b5563; background:#374151; color:white;">
 
-        <div id="add-error" style="color: #ef4444; font-size: 0.8rem; margin-bottom: 1rem;"></div>
+        <div id="add-error" style="color: #f59e0b; font-size: 0.8rem; margin-bottom: 1rem;"></div>
 
         <div style="display:flex; gap: 0.5rem;">
-          <button onclick="submitProduct()" style="flex:1; background:#d97706; color:white; border:none; padding: 0.6rem; border-radius:4px; font-weight:bold;">Publier</button>
+          <button id="btn-pub" onclick="submitProduct()" style="flex:1; background:#d97706; color:white; border:none; padding: 0.6rem; border-radius:4px; font-weight:bold;">Publier</button>
           <button onclick="closeModal()" style="flex:1; background:#4b5563; color:white; border:none; padding: 0.6rem; border-radius:4px;">Annuler</button>
         </div>
       </div>
@@ -169,31 +243,56 @@ window.openAddProductModal = function() {
   `;
 };
 
-// Soumission du produit
-window.submitProduct = function() {
+window.submitProduct = async function() {
   const title = document.getElementById('add-title').value;
   const price = parseInt(document.getElementById('add-price').value, 10);
-  const img = document.getElementById('add-img').value;
+  const fileInput = document.getElementById('add-file');
   const errDiv = document.getElementById('add-error');
+  const btnPub = document.getElementById('btn-pub');
 
-  if (!title || !price || !img) {
-    errDiv.textContent = "Veuillez remplir tous les champs.";
+  if (!title || !price || fileInput.files.length === 0) {
+    errDiv.textContent = "Remplissez le nom, prix et choisissez une photo.";
     return;
   }
 
-  errDiv.textContent = "Publication en cours...";
+  btnPub.disabled = true;
+  errDiv.textContent = "Téléversement de la photo...";
 
-  db.collection('products').add({
-    title: title,
-    price: price,
-    images: [img],
-    isReserved: false,
-    createdAt: firebase.firestore.FieldValue.serverTimestamp()
-  }).then(() => {
+  try {
+    let imageUrl = "";
+
+    // Si la clé API est fournie, envoie vers ImgBB
+    if (IMGBB_API_KEY && IMGBB_API_KEY !== "VOTRE_CLE_IMGBB_ICI") {
+      const formData = new FormData();
+      formData.append('image', fileInput.files[0]);
+
+      const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error("Erreur téléversement image");
+      imageUrl = data.data.url;
+    } else {
+      // Image temporaire de remplacement si pas encore de clé ImgBB
+      imageUrl = "https://via.placeholder.com/400x400.png?text=Vêtement";
+    }
+
+    errDiv.textContent = "Enregistrement dans la boutique...";
+
+    await db.collection('products').add({
+      title: title,
+      price: price,
+      images: [imageUrl],
+      isReserved: false,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
     closeModal();
     alert("Article publié avec succès !");
-    loadCatalog();
-  }).catch((err) => {
+    switchView('catalog');
+  } catch (err) {
     errDiv.textContent = "Erreur : " + err.message;
-  });
+    btnPub.disabled = false;
+  }
 };
