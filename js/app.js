@@ -261,3 +261,52 @@ function loadProfileView() {
 function escapeHtml(str) {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Destie Shop - Pointe-Noire</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#d97706">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+  <header>
+    <h1>Destie Shop</h1>
+    <div style="display: flex; gap: 0.5rem;" id="header-actions">
+      <button class="btn" onclick="openAddProductModal()"><i class="fa-solid fa-plus"></i> Ajouter</button>
+      <div id="auth-header-btn">
+        <button class="btn btn-secondary" onclick="openLoginModal()"><i class="fa-solid fa-user"></i> Connexion</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container" id="app-content">
+    <div class="product-grid" id="product-list"></div>
+  </main>
+
+  <nav class="bottom-nav">
+    <a href="#" class="nav-item active" onclick="switchView('catalog')">
+      <i class="fa-solid fa-store"></i>Catalogue
+    </a>
+    <a href="#" class="nav-item" onclick="switchView('reservations')">
+      <i class="fa-solid fa-box-archive"></i>Réservations
+    </a>
+    <a href="#" class="nav-item" onclick="switchView('profile')">
+      <i class="fa-solid fa-user-gear"></i>Profil
+    </a>
+  </nav>
+
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage-compat.js"></script>
+  
+  <script src="js/firebase-config.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
