@@ -1,6 +1,6 @@
 // Clé API ImgBB (Indiquez la vôtre pour l'envoi de photos)
 const IMGBB_API_KEY = "VOTRE_CLE_IMGBB_ICI";
-const SELLER_EMAIL = "primodestiem0@gmail.com";
+const SELLER_EMAIL = "primodestiem@gmail.com";
 
 document.addEventListener('DOMContentLoaded', () => {
   loadCatalog();
