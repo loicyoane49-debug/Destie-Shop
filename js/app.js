@@ -1,13 +1,11 @@
-// Clé API ImgBB (Indiquez la vôtre pour l'envoi de photos)
-const IMGBB_API_KEY = 78a05420bee5b030e2061970a6cf2b3d;
 const SELLER_EMAIL = "primodestiem@gmail.com";
+const IMGBB_API_KEY = "VOTRE_CLE_IMGBB_ICI"; // Remplacez par votre clé si vous en avez une
 
 document.addEventListener('DOMContentLoaded', () => {
   loadCatalog();
   setupAuthListener();
 });
 
-// Suivi de la connexion
 function setupAuthListener() {
   if (typeof firebase === 'undefined' || !firebase.auth) return;
 
@@ -15,7 +13,6 @@ function setupAuthListener() {
     const headerActions = document.getElementById('header-actions');
     if (!headerActions) return;
 
-    // Vérifie de manière robuste si c'est la vendeuse
     const isSeller = user && user.email && user.email.trim().toLowerCase() === SELLER_EMAIL.toLowerCase();
 
     if (isSeller) {
@@ -24,12 +21,10 @@ function setupAuthListener() {
         <button class="btn btn-secondary" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> Déconnexion</button>
       `;
     } else if (user) {
-      // Client connecté
       headerActions.innerHTML = `
         <button class="btn btn-secondary" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> Déconnexion</button>
       `;
     } else {
-      // Non connecté
       headerActions.innerHTML = `
         <button class="btn btn-secondary" onclick="openLoginModal()"><i class="fa-solid fa-user"></i> Connexion</button>
       `;
@@ -37,7 +32,6 @@ function setupAuthListener() {
   });
 }
 
-// Navigation entre les onglets du bas
 window.switchView = function(viewName) {
   const container = document.getElementById('app-content');
   if (!container) return;
@@ -58,7 +52,6 @@ window.switchView = function(viewName) {
   }
 };
 
-// VUE CATALOGUE
 async function loadCatalog() {
   const productList = document.getElementById('product-list');
   if (!productList) return;
@@ -98,7 +91,6 @@ async function loadCatalog() {
   }
 }
 
-// VUE RÉSERVATIONS
 function loadReservationsView() {
   const container = document.getElementById('app-content');
   const user = firebase.auth().currentUser;
@@ -123,7 +115,6 @@ function loadReservationsView() {
   `;
 }
 
-// VUE PROFIL
 function loadProfileView() {
   const container = document.getElementById('app-content');
   const user = firebase.auth().currentUser;
@@ -148,7 +139,6 @@ function loadProfileView() {
   }
 }
 
-// POPUP DE CONNEXION
 window.openLoginModal = function() {
   let modal = document.getElementById('login-modal');
   if (!modal) {
@@ -190,7 +180,7 @@ window.submitLogin = function() {
     .then(() => {
       closeModal();
       alert("Connexion réussie !");
-      window.location.reload(); // Recharge propre pour fixer l'état de l'interface
+      window.location.reload();
     })
     .catch((err) => {
       errDiv.textContent = "Erreur : " + err.message;
@@ -211,7 +201,6 @@ window.closeModal = function() {
   if (addModal) addModal.remove();
 };
 
-// POPUP AJOUT DE PRODUIT
 window.openAddProductModal = function() {
   let modal = document.getElementById('add-modal');
   if (!modal) {
@@ -231,10 +220,10 @@ window.openAddProductModal = function() {
         <label style="display:block; font-size:0.85rem; margin-bottom: 0.25rem;">Prix (XAF)</label>
         <input type="number" id="add-price" placeholder="15000" style="width:100%; padding: 0.5rem; margin-bottom: 0.8rem; border-radius:4px; border:1px solid #4b5563; background:#374151; color:white;">
         
-        <label style="display:block; font-size:0.85rem; margin-bottom: 0.25rem;">Choisir la photo (Galerie/Caméra)</label>
-        <input type="file" id="add-file" accept="image/*" style="width:100%; padding: 0.5rem; margin-bottom: 1rem; border-radius:4px; border:1px solid #4b5563; background:#374151; color:white;">
+        <label style="display:block; font-size:0.85rem; margin-bottom: 0.25rem;">Lien Web de la photo (URL .jpg / .png)</label>
+        <input type="url" id="add-url" placeholder="https://..." style="width:100%; padding: 0.5rem; margin-bottom: 1rem; border-radius:4px; border:1px solid #4b5563; background:#374151; color:white;">
 
-        <div id="add-error" style="color: #f59e0b; font-size: 0.8rem; margin-bottom: 1rem;"></div>
+        <div id="add-error" style="color: #ef4444; font-size: 0.8rem; margin-bottom: 1rem;"></div>
 
         <div style="display:flex; gap: 0.5rem;">
           <button id="btn-pub" onclick="submitProduct()" style="flex:1; background:#d97706; color:white; border:none; padding: 0.6rem; border-radius:4px; font-weight:bold; cursor:pointer;">Publier</button>
@@ -248,38 +237,19 @@ window.openAddProductModal = function() {
 window.submitProduct = async function() {
   const title = document.getElementById('add-title').value;
   const price = parseInt(document.getElementById('add-price').value, 10);
-  const fileInput = document.getElementById('add-file');
+  const imageUrl = document.getElementById('add-url').value;
   const errDiv = document.getElementById('add-error');
   const btnPub = document.getElementById('btn-pub');
 
-  if (!title || !price || fileInput.files.length === 0) {
-    errDiv.textContent = "Remplissez le nom, prix et choisissez une photo.";
+  if (!title || !price || !imageUrl) {
+    errDiv.textContent = "Veuillez remplir le nom, le prix et le lien de la photo.";
     return;
   }
 
   btnPub.disabled = true;
-  errDiv.textContent = "Téléversement de la photo...";
+  errDiv.textContent = "Publication dans la boutique...";
 
   try {
-    let imageUrl = "";
-
-    if (IMGBB_API_KEY && IMGBB_API_KEY !== "VOTRE_CLE_IMGBB_ICI") {
-      const formData = new FormData();
-      formData.append('image', fileInput.files[0]);
-
-      const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
-        method: 'POST',
-        body: formData
-      });
-      const data = await res.json();
-      if (!data.success) throw new Error("Erreur téléversement image");
-      imageUrl = data.data.url;
-    } else {
-      imageUrl = "https://via.placeholder.com/400x400.png?text=Vêtement";
-    }
-
-    errDiv.textContent = "Enregistrement dans la boutique...";
-
     await db.collection('products').add({
       title: title,
       price: price,
