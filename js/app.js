@@ -168,13 +168,17 @@ function closeModal() {
 }
 
 function openLoginModal() {
-  const email = prompt("Entrez votre email pour vous connecter/inscrire :");
-  if (email) {
-    const password = prompt("Entrez votre mot de passe :");
+  const phone = prompt("Entrez votre numéro de téléphone (ex: 061234567) :");
+  if (phone) {
+    // On nettoie le numéro pour en faire un email unique en arrière-plan
+    const cleanPhone = phone.replace(/\D/g, '');
+    const fakeEmail = `${cleanPhone}@destieshop.local`;
+    
+    const password = prompt("Choisissez un mot de passe (minimum 6 caractères) :");
     if (password) {
-      auth.signInWithEmailAndPassword(email, password)
+      auth.signInWithEmailAndPassword(fakeEmail, password)
         .catch(() => {
-          auth.createUserWithEmailAndPassword(email, password)
+          auth.createUserWithEmailAndPassword(fakeEmail, password)
             .catch(err => alert("Erreur d'authentification : " + err.message));
         });
     }
