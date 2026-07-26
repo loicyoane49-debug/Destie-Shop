@@ -1,6 +1,4 @@
 const SELLER_EMAIL = "primodestiem@gmail.com";
-// Insérez votre clé API ImgBB entre les guillemets ci-dessous :
-const IMGBB_API_KEY = 78a05420bee5b030e2061970a6cf2b3d;
 
 document.addEventListener('DOMContentLoaded', () => {
   loadCatalog();
@@ -54,15 +52,27 @@ window.switchView = function(viewName) {
 };
 
 async function loadCatalog() {
-  const productList = document.getElementById('product-list');
-  if (!productList) return;
+  let container = document.getElementById('app-content');
+  if (!container) return;
+
+  let productList = document.getElementById('product-list');
+  if (!productList) {
+    container.innerHTML = `<div class="product-grid" id="product-list"></div>`;
+    productList = document.getElementById('product-list');
+  }
 
   try {
     const snapshot = await db.collection('products').get();
     productList.innerHTML = '';
 
     if (snapshot.empty) {
-      productList.innerHTML = '<p style="grid-column: 1/-1; text-align: center; padding: 2rem;">Aucun article dans le catalogue.</p>';
+      productList.innerHTML = `
+        <div style="grid-column: 1/-1; text-align: center; padding: 3rem 1rem;">
+          <i class="fa-solid fa-store" style="font-size: 3rem; color: #d1d5db; margin-bottom: 1rem;"></i>
+          <h3 style="color: #4b5563;">Le catalogue est vide</h3>
+          <p style="color: #9ca3af; font-size: 0.9rem; margin-top: 0.5rem;">Aucun vêtement pour le moment.</p>
+        </div>
+      `;
       return;
     }
 
@@ -77,41 +87,27 @@ async function loadCatalog() {
           <img src="${imageUrl}" alt="${p.title || 'Article'}">
         </div>
         <div class="product-info">
-          <span class="badge ${p.isReserved ? 'badge-reserved' : 'badge-available'}">
+          <span class="badge" style="background:#d1fae5; color:#065f46; padding:2px 6px; border-radius:4px; font-size:0.75rem;">
             ${p.isReserved ? 'Réservé' : 'Disponible'}
           </span>
           <h3 class="product-title">${p.title || 'Article'}</h3>
           <p class="product-price">${p.price ? p.price.toLocaleString('fr-FR') : 0} XAF</p>
-          ${!p.isReserved ? `<button class="btn" style="width:100%; margin-top:0.5rem;" onclick="alert('Réservation enregistrée !')">Réserver</button>` : ''}
         </div>
       `;
       productList.appendChild(card);
     });
   } catch (err) {
     console.error("Erreur catalogue :", err);
+    productList.innerHTML = `<p style="grid-column: 1/-1; text-align: center; color: #ef4444; padding: 2rem;">Erreur lors du chargement des produits.</p>`;
   }
 }
 
 function loadReservationsView() {
   const container = document.getElementById('app-content');
-  const user = firebase.auth().currentUser;
-
-  if (!user) {
-    container.innerHTML = `
-      <div style="text-align: center; padding: 3rem 1rem;">
-        <i class="fa-solid fa-box-archive" style="font-size: 3rem; color: #9ca3af; margin-bottom: 1rem;"></i>
-        <h3>Mes Réservations</h3>
-        <p style="color: #6b7280; margin-top: 0.5rem;">Veuillez vous connecter pour voir vos réservations.</p>
-        <button class="btn" style="margin-top: 1rem;" onclick="openLoginModal()">Se connecter</button>
-      </div>
-    `;
-    return;
-  }
-
   container.innerHTML = `
-    <div style="padding: 1rem;">
-      <h3 style="margin-bottom: 1rem;">Vos réservations</h3>
-      <p style="color: #6b7280;">Aucune réservation enregistrée pour le moment.</p>
+    <div style="padding: 2rem; text-align: center;">
+      <h3>Mes Réservations</h3>
+      <p style="color: #6b7280; margin-top: 0.5rem;">Aucune réservation enregistrée.</p>
     </div>
   `;
 }
@@ -122,16 +118,15 @@ function loadProfileView() {
 
   if (user) {
     container.innerHTML = `
-      <div style="padding: 1.5rem; background: white; border-radius: 8px; margin: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-        <h3 style="margin-bottom: 0.5rem;">Profil Utilisateur</h3>
+      <div style="padding: 1.5rem; background: white; border-radius: 8px; margin: 1rem;">
+        <h3 style="margin-bottom: 0.5rem;">Mon Profil</h3>
         <p style="color: #4b5563;">Connecté en tant que : <strong>${user.email}</strong></p>
-        <button class="btn btn-secondary" style="margin-top: 1.5rem;" onclick="logout()">Se déconnecter</button>
+        <button class="btn btn-secondary" style="margin-top: 1.5rem;" onclick="logout()">Déconnexion</button>
       </div>
     `;
   } else {
     container.innerHTML = `
       <div style="text-align: center; padding: 3rem 1rem;">
-        <i class="fa-solid fa-user-gear" style="font-size: 3rem; color: #9ca3af; margin-bottom: 1rem;"></i>
         <h3>Mon Profil</h3>
         <p style="color: #6b7280; margin-top: 0.5rem;">Vous n'êtes pas connecté.</p>
         <button class="btn" style="margin-top: 1rem;" onclick="openLoginModal()">Se connecter</button>
@@ -243,32 +238,51 @@ window.submitProduct = async function() {
   const btnPub = document.getElementById('btn-pub');
 
   if (!title || !price || fileInput.files.length === 0) {
-    errDiv.textContent = "Remplissez le nom, le prix et sélectionnez une photo.";
-    return;
-  }
-
-  if (!IMGBB_API_KEY || IMGBB_API_KEY === "VOTRE_CLE_IMGBB_ICI") {
-    errDiv.textContent = "Veuillez insérer votre clé API ImgBB à la ligne 3 de app.js.";
+    errDiv.textContent = "Veuillez tout remplir et choisir une photo.";
     return;
   }
 
   btnPub.disabled = true;
-  errDiv.textContent = "Envoi de la photo sur le serveur...";
+  errDiv.textContent = "Traitement de l'image...";
 
   try {
-    const formData = new FormData();
-    formData.append('image', fileInput.files[0]);
+    const file = fileInput.files[0];
+    const imageUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_SIZE = 400;
+          let width = img.width;
+          let height = img.height;
 
-    const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
-      method: 'POST',
-      body: formData
+          if (width > height) {
+            if (width > MAX_SIZE) {
+              height *= MAX_SIZE / width;
+              width = MAX_SIZE;
+            }
+          } else {
+            if (height > MAX_SIZE) {
+              width *= MAX_SIZE / height;
+              height = MAX_SIZE;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', 0.6));
+        };
+        img.onerror = reject;
+        img.src = e.target.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
     });
 
-    const data = await res.json();
-    if (!data.success) throw new Error("Impossible d'héberger la photo.");
-
-    const imageUrl = data.data.url;
-    errDiv.textContent = "Enregistrement dans le catalogue...";
+    errDiv.textContent = "Enregistrement...";
 
     await db.collection('products').add({
       title: title,
