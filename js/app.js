@@ -312,7 +312,7 @@ function escapeHtml(str) {
 </html>
 
 // Clé API ImgBB (Remplacez par votre clé obtenue sur api.imgbb.com)
-const IMGBB_API_KEY = "VOTRE_CLE_API_IMGBB";
+const IMGBB_API_KEY = 78a05420bee5b030e2061970a6cf2b3d;
 
 function openAddProductModal() {
   let modalContainer = document.getElementById('modal-container');
