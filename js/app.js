@@ -1,5 +1,6 @@
 const SELLER_EMAIL = "primodestiem@gmail.com";
-const IMGBB_API_KEY = "VOTRE_CLE_IMGBB_ICI"; // Remplacez par votre clé si vous en avez une
+// Insérez votre clé API ImgBB entre les guillemets ci-dessous :
+const IMGBB_API_KEY = 78a05420bee5b030e2061970a6cf2b3d;
 
 document.addEventListener('DOMContentLoaded', () => {
   loadCatalog();
@@ -220,10 +221,10 @@ window.openAddProductModal = function() {
         <label style="display:block; font-size:0.85rem; margin-bottom: 0.25rem;">Prix (XAF)</label>
         <input type="number" id="add-price" placeholder="15000" style="width:100%; padding: 0.5rem; margin-bottom: 0.8rem; border-radius:4px; border:1px solid #4b5563; background:#374151; color:white;">
         
-        <label style="display:block; font-size:0.85rem; margin-bottom: 0.25rem;">Lien Web de la photo (URL .jpg / .png)</label>
-        <input type="url" id="add-url" placeholder="https://..." style="width:100%; padding: 0.5rem; margin-bottom: 1rem; border-radius:4px; border:1px solid #4b5563; background:#374151; color:white;">
+        <label style="display:block; font-size:0.85rem; margin-bottom: 0.25rem;">Photo (Galerie / Téléphone)</label>
+        <input type="file" id="add-file" accept="image/*" style="width:100%; padding: 0.5rem; margin-bottom: 1rem; border-radius:4px; border:1px solid #4b5563; background:#374151; color:white;">
 
-        <div id="add-error" style="color: #ef4444; font-size: 0.8rem; margin-bottom: 1rem;"></div>
+        <div id="add-error" style="color: #f59e0b; font-size: 0.8rem; margin-bottom: 1rem;"></div>
 
         <div style="display:flex; gap: 0.5rem;">
           <button id="btn-pub" onclick="submitProduct()" style="flex:1; background:#d97706; color:white; border:none; padding: 0.6rem; border-radius:4px; font-weight:bold; cursor:pointer;">Publier</button>
@@ -237,19 +238,38 @@ window.openAddProductModal = function() {
 window.submitProduct = async function() {
   const title = document.getElementById('add-title').value;
   const price = parseInt(document.getElementById('add-price').value, 10);
-  const imageUrl = document.getElementById('add-url').value;
+  const fileInput = document.getElementById('add-file');
   const errDiv = document.getElementById('add-error');
   const btnPub = document.getElementById('btn-pub');
 
-  if (!title || !price || !imageUrl) {
-    errDiv.textContent = "Veuillez remplir le nom, le prix et le lien de la photo.";
+  if (!title || !price || fileInput.files.length === 0) {
+    errDiv.textContent = "Remplissez le nom, le prix et sélectionnez une photo.";
+    return;
+  }
+
+  if (!IMGBB_API_KEY || IMGBB_API_KEY === "VOTRE_CLE_IMGBB_ICI") {
+    errDiv.textContent = "Veuillez insérer votre clé API ImgBB à la ligne 3 de app.js.";
     return;
   }
 
   btnPub.disabled = true;
-  errDiv.textContent = "Publication dans la boutique...";
+  errDiv.textContent = "Envoi de la photo sur le serveur...";
 
   try {
+    const formData = new FormData();
+    formData.append('image', fileInput.files[0]);
+
+    const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
+      method: 'POST',
+      body: formData
+    });
+
+    const data = await res.json();
+    if (!data.success) throw new Error("Impossible d'héberger la photo.");
+
+    const imageUrl = data.data.url;
+    errDiv.textContent = "Enregistrement dans le catalogue...";
+
     await db.collection('products').add({
       title: title,
       price: price,
