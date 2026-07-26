@@ -1,84 +1,83 @@
+// 1. Clé ImgBB (Remplacez par votre vraie clé depuis api.imgbb.com)
+const IMGBB_API_KEY = 78a05420bee5b030e2061970a6cf2b3d;
+
+// 2. Email officiel de votre sœur (vendeuse)
+const SELLER_EMAIL = "primodestiem0@gmail.com";
+
+// Initialisation au chargement de la page
 document.addEventListener('DOMContentLoaded', () => {
-  initApp();
+  loadCatalog();
 });
 
-let currentUser = null;
+// Écoute de l'état de connexion de l'utilisateur
+firebase.auth().onAuthStateChanged((user) => {
+  const headerActions = document.getElementById('header-actions');
+  if (!headerActions) return;
 
-function initApp() {
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js')
-      .then(() => console.log('Service Worker enregistré avec succès.'))
-      .catch((err) => console.log('Échec d\'enregistrement du Service Worker :', err));
-  }
-
-  auth.onAuthStateChanged((user) => {
-    currentUser = user;
-    updateHeaderAuthUI();
-    loadCatalog();
-  });
-}
-
-function updateHeaderAuthUI() {
-  const headerBtn = document.getElementById('auth-header-btn');
-  if (currentUser) {
-    headerBtn.innerHTML = `<button class="btn btn-secondary" onclick="logout()"><i class="fa-solid fa-sign-out-alt"></i> Déconnexion</button>`;
+  if (user) {
+    if (user.email === SELLER_EMAIL) {
+      headerActions.innerHTML = `
+        <button class="btn" onclick="openAddProductModal()"><i class="fa-solid fa-plus"></i> Ajouter</button>
+        <button class="btn btn-secondary" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> Déconnexion</button>
+      `;
+    } else {
+      headerActions.innerHTML = `
+        <button class="btn btn-secondary" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> Déconnexion</button>
+      `;
+    }
   } else {
-    headerBtn.innerHTML = `<button class="btn btn-secondary" onclick="openLoginModal()"><i class="fa-solid fa-user"></i> Connexion</button>`;
+    headerActions.innerHTML = `
+      <button class="btn btn-secondary" onclick="openLoginModal()"><i class="fa-solid fa-user"></i> Connexion</button>
+    `;
   }
-}
+});
 
+// Charger le catalogue
 async function loadCatalog() {
-  const productListEl = document.getElementById('product-list');
-  productListEl.innerHTML = '<p style="grid-column: 1/-1; text-align: center; padding: 2rem;">Chargement des articles de Pointe-Noire...</p>';
+  const productList = document.getElementById('product-list');
+  if (!productList) return;
+
+  productList.innerHTML = '<p style="grid-column: 1/-1; text-align: center;">Chargement des articles...</p>';
 
   try {
     const snapshot = await db.collection('products').orderBy('createdAt', 'desc').get();
-    
+    productList.innerHTML = '';
+
     if (snapshot.empty) {
-      productListEl.innerHTML = '<p style="grid-column: 1/-1; text-align: center; padding: 2rem; color: var(--text-light);">Aucun article disponible pour le moment.</p>';
+      productList.innerHTML = '<p style="grid-column: 1/-1; text-align: center;">Aucun article disponible pour le moment.</p>';
       return;
     }
 
-    let html = '';
     snapshot.forEach((doc) => {
-      const product = doc.data();
-      const productId = doc.id;
-      const isReserved = product.isReserved || false;
-      
-      const badgeClass = isReserved ? 'badge reserved' : 'badge available';
-      const badgeText = isReserved ? 'Réservé' : 'Disponible';
-      
-      const primaryImage = product.images && product.images.length > 0 ? product.images[0] : 'https://via.placeholder.com/180';
+      const p = doc.data();
+      const id = doc.id;
+      const imageUrl = (p.images && p.images.length > 0) ? p.images[0] : 'https://via.placeholder.com/300';
 
-      html += `
-        <div class="product-card">
-          <img src="${primaryImage}" alt="${product.title}" class="product-img">
-          <div class="product-info">
-            <span class="${badgeClass}">${badgeText}</span>
-            <div class="product-title">${escapeHtml(product.title)}</div>
-            <div class="product-price">${product.price.toLocaleString('fr-FR')} XAF</div>
-            <button class="btn" style="margin-top: auto;" onclick="openReservationModal('${productId}', '${escapeHtml(product.title)}', ${product.price})">
-              ${isReserved ? 'Indisponible' : 'Réserver'}
-            </button>
-          </div>
+      const card = document.createElement('div');
+      card.className = 'product-card';
+      card.innerHTML = `
+        <div class="product-image">
+          <img src="${imageUrl}" alt="${p.title}">
+        </div>
+        <div class="product-info">
+          <span class="badge ${p.isReserved ? 'badge-reserved' : 'badge-available'}">
+            ${p.isReserved ? 'Réservé' : 'Disponible'}
+          </span>
+          <h3 class="product-title">${p.title}</h3>
+          <p class="product-price">${p.price ? p.price.toLocaleString('fr-FR') : 0} XAF</p>
+          ${!p.isReserved ? `<button class="btn" onclick="reserveProduct('${id}')">Réserver</button>` : ''}
         </div>
       `;
+      productList.appendChild(card);
     });
-
-    productListEl.innerHTML = html;
-  } catch (error) {
-    console.error("Erreur lors du chargement du catalogue :", error);
-    productListEl.innerHTML = '<p style="grid-column: 1/-1; text-align: center; color: var(--danger);">Erreur de chargement des articles.</p>';
+  } catch (err) {
+    console.error("Erreur catalogue :", err);
+    productList.innerHTML = '<p style="grid-column: 1/-1; text-align: center;">Erreur lors du chargement des articles.</p>';
   }
 }
 
-function openReservationModal(productId, productTitle, productPrice) {
-  if (!currentUser) {
-    alert("Veuillez vous connecter pour effectuer une réservation.");
-    openLoginModal();
-    return;
-  }
-
+// Ouvrir la modale de Connexion
+function openLoginModal() {
   let modalContainer = document.getElementById('modal-container');
   if (!modalContainer) {
     modalContainer = document.createElement('div');
@@ -88,25 +87,19 @@ function openReservationModal(productId, productTitle, productPrice) {
 
   modalContainer.innerHTML = `
     <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 2000; padding: 1rem;">
-      <div style="background: white; padding: 1.5rem; border-radius: 8px; width: 100%; max-width: 400px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-        <h3 style="margin-bottom: 0.5rem; color: var(--primary-dark);">Réserver un article</h3>
-        <p style="font-size: 0.9rem; color: var(--text-light); margin-bottom: 1rem;"><strong>${productTitle}</strong> - ${productPrice.toLocaleString('fr-FR')} XAF</p>
-        
-        <form id="reservation-form" onsubmit="submitReservation(event, '${productId}', '${productTitle}', ${productPrice})">
+      <div style="background: white; padding: 1.5rem; border-radius: 8px; width: 100%; max-width: 350px;">
+        <h3 style="margin-bottom: 1rem; color: #1f2937;">Connexion</h3>
+        <form onsubmit="handleLogin(event)">
           <div style="margin-bottom: 0.75rem;">
-            <label style="display: block; font-size: 0.85rem; margin-bottom: 0.25rem;">Votre Nom complet</label>
-            <input type="text" id="res-name" required style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 4px;">
-          </div>
-          <div style="margin-bottom: 0.75rem;">
-            <label style="display: block; font-size: 0.85rem; margin-bottom: 0.25rem;">Numéro de téléphone (WhatsApp)</label>
-            <input type="tel" id="res-phone" placeholder="+242 06..." required style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 4px;">
+            <label style="display: block; font-size: 0.85rem; margin-bottom: 0.25rem;">Email</label>
+            <input type="email" id="login-email" required style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 4px;">
           </div>
           <div style="margin-bottom: 1rem;">
-            <label style="display: block; font-size: 0.85rem; margin-bottom: 0.25rem;">Message ou précision (Optionnel)</label>
-            <textarea id="res-msg" style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 4px; height: 60px;"></textarea>
+            <label style="display: block; font-size: 0.85rem; margin-bottom: 0.25rem;">Mot de passe</label>
+            <input type="password" id="login-password" required style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 4px;">
           </div>
           <div style="display: flex; gap: 0.5rem;">
-            <button type="submit" class="btn" style="flex: 1;">Valider la réservation</button>
+            <button type="submit" class="btn" style="flex: 1;">Se connecter</button>
             <button type="button" class="btn btn-secondary" onclick="closeModal()" style="flex: 1;">Annuler</button>
           </div>
         </form>
@@ -115,205 +108,30 @@ function openReservationModal(productId, productTitle, productPrice) {
   `;
 }
 
-async function submitReservation(event, productId, productTitle, productPrice) {
-  event.preventDefault();
-  
-  const clientName = document.getElementById('res-name').value;
-  const clientPhone = document.getElementById('res-phone').value;
-  const message = document.getElementById('res-msg').value;
-
-  const reservationData = {
-    clientId: currentUser.uid,
-    clientName: clientName,
-    clientPhone: clientPhone,
-    productId: productId,
-    productTitle: productTitle,
-    productPrice: productPrice,
-    quantity: 1,
-    totalAmount: productPrice,
-    status: 'pending_confirmation',
-    message: message,
-    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
-  };
+// Connexion de l'utilisateur
+async function handleLogin(e) {
+  e.preventDefault();
+  const email = document.getElementById('login-email').value;
+  const password = document.getElementById('login-password').value;
 
   try {
-    const batch = db.batch();
-    
-    const resRef = db.collection('reservations').doc();
-    batch.set(resRef, reservationData);
-
-    const productRef = db.collection('products').doc(productId);
-    batch.update(productRef, { isReserved: true });
-
-    await batch.commit();
-
+    await firebase.auth().signInWithEmailAndPassword(email, password);
     closeModal();
-    alert("Réservation enregistrée avec succès ! Veuillez contacter la vendeuse pour finaliser le paiement hors application.");
-    
-    const vendorPhone = "24206000000"; // Remplacez par votre numéro WhatsApp (sans le +)
-    const waText = encodeURIComponent(`Bonjour, je viens de réserver l'article "${productTitle}" sur Destie Shop. Mon nom est ${clientName}. Comment procéder au paiement ?`);
-    window.open(`https://wa.me/${vendorPhone}?text=${waText}`, '_blank');
-
-    loadCatalog();
-  } catch (error) {
-    console.error("Erreur lors de la réservation :", error);
-    alert("Une erreur est survenue lors de la réservation.");
+    alert("Connexion réussie !");
+  } catch (err) {
+    alert("Erreur de connexion : " + err.message);
   }
 }
 
-function closeModal() {
-  const modalContainer = document.getElementById('modal-container');
-  if (modalContainer) modalContainer.innerHTML = '';
-}
-
-function openLoginModal() {
-  const phone = prompt("Entrez votre numéro de téléphone (ex: 061234567) :");
-  if (phone) {
-    // On nettoie le numéro pour en faire un email unique en arrière-plan
-    const cleanPhone = phone.replace(/\D/g, '');
-    const fakeEmail = `${cleanPhone}@destieshop.local`;
-    
-    const password = prompt("Choisissez un mot de passe (minimum 6 caractères) :");
-    if (password) {
-      auth.signInWithEmailAndPassword(fakeEmail, password)
-        .catch(() => {
-          auth.createUserWithEmailAndPassword(fakeEmail, password)
-            .catch(err => alert("Erreur d'authentification : " + err.message));
-        });
-    }
-  }
-}
-
+// Déconnexion
 function logout() {
-  auth.signOut();
+  firebase.auth().signOut().then(() => {
+    alert("Déconnecté.");
+    window.location.reload();
+  });
 }
 
-function switchView(viewName) {
-  const navItems = document.querySelectorAll('.nav-item');
-  navItems.forEach(item => item.classList.remove('active'));
-  event.currentTarget.classList.add('active');
-  
-  if (viewName === 'catalog') {
-    loadCatalog();
-  } else if (viewName === 'reservations') {
-    loadUserReservations();
-  } else if (viewName === 'profile') {
-    loadProfileView();
-  }
-}
-
-async function loadUserReservations() {
-  const contentEl = document.getElementById('app-content');
-  if (!currentUser) {
-    contentEl.innerHTML = '<p style="text-align: center; padding: 2rem;">Veuillez vous connecter pour voir vos réservations.</p>';
-    return;
-  }
-  
-  contentEl.innerHTML = '<p style="text-align: center; padding: 2rem;">Chargement de vos réservations...</p>';
-  try {
-    const snapshot = await db.collection('reservations').where('clientId', '==', currentUser.uid).get();
-    if (snapshot.empty) {
-      contentEl.innerHTML = '<p style="text-align: center; padding: 2rem; color: var(--text-light);">Vous n\'avez aucune réservation en cours.</p>';
-      return;
-    }
-
-    let html = '<h2 style="margin-bottom: 1rem; font-size: 1.2rem;">Mes Réservations</h2><div style="display: flex; flex-direction: column; gap: 1rem;">';
-    snapshot.forEach(doc => {
-      const res = doc.data();
-      let statusBadge = '';
-      if (res.status === 'pending_confirmation') statusBadge = '<span class="badge" style="background:#fef3c7; color:#92400e;">En attente de paiement / confirmation</span>';
-      else if (res.status === 'confirmed') statusBadge = '<span class="badge available">Confirmée</span>';
-      else if (res.status === 'cancelled') statusBadge = '<span class="badge reserved">Annulée</span>';
-
-      html += `
-        <div style="background: white; padding: 1rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-          <div style="font-weight: 600; margin-bottom: 0.25rem;">${escapeHtml(res.productTitle)}</div>
-          <div style="color: var(--primary-dark); font-weight: bold; margin-bottom: 0.5rem;">${res.totalAmount.toLocaleString('fr-FR')} XAF</div>
-          <div style="margin-bottom: 0.5rem;">${statusBadge}</div>
-          <p style="font-size: 0.8rem; color: var(--text-light);">Contactez la vendeuse sur WhatsApp pour valider votre paiement hors application.</p>
-        </div>
-      `;
-    });
-    html += '</div>';
-    contentEl.innerHTML = html;
-  } catch (error) {
-    console.error(error);
-  }
-}
-
-function loadProfileView() {
-  const contentEl = document.getElementById('app-content');
-  if (!currentUser) {
-    contentEl.innerHTML = '<p style="text-align: center; padding: 2rem;">Veuillez vous connecter pour voir votre profil.</p>';
-    return;
-  }
-  contentEl.innerHTML = `
-    <div style="background: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-      <h2 style="margin-bottom: 1rem; font-size: 1.2rem;">Mon Profil Client</h2>
-      <p style="margin-bottom: 0.5rem;"><strong>Email :</strong> ${currentUser.email}</p>
-      <p style="margin-bottom: 1.5rem;"><strong>UID :</strong> ${currentUser.uid}</p>
-      <button class="btn btn-secondary" onclick="logout()">Se déconnecter</button>
-    </div>
-  `;
-}
-
-function escapeHtml(str) {
-  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
-}
-
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Destie Shop - Pointe-Noire</title>
-  <link rel="stylesheet" href="css/style.css">
-  <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#d97706">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-</head>
-<body>
-
-  <header>
-    <h1>Destie Shop</h1>
-    <div style="display: flex; gap: 0.5rem;" id="header-actions">
-      <button class="btn" onclick="openAddProductModal()"><i class="fa-solid fa-plus"></i> Ajouter</button>
-      <div id="auth-header-btn">
-        <button class="btn btn-secondary" onclick="openLoginModal()"><i class="fa-solid fa-user"></i> Connexion</button>
-      </div>
-    </div>
-  </header>
-
-  <main class="container" id="app-content">
-    <div class="product-grid" id="product-list"></div>
-  </main>
-
-  <nav class="bottom-nav">
-    <a href="#" class="nav-item active" onclick="switchView('catalog')">
-      <i class="fa-solid fa-store"></i>Catalogue
-    </a>
-    <a href="#" class="nav-item" onclick="switchView('reservations')">
-      <i class="fa-solid fa-box-archive"></i>Réservations
-    </a>
-    <a href="#" class="nav-item" onclick="switchView('profile')">
-      <i class="fa-solid fa-user-gear"></i>Profil
-    </a>
-  </nav>
-
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage-compat.js"></script>
-  
-  <script src="js/firebase-config.js"></script>
-  <script src="js/app.js"></script>
-</body>
-</html>
-
-// Clé API ImgBB (Remplacez par votre clé obtenue sur api.imgbb.com)
-const IMGBB_API_KEY = 78a05420bee5b030e2061970a6cf2b3d;
-
+// Ouvrir la modale d'ajout de produit
 function openAddProductModal() {
   let modalContainer = document.getElementById('modal-container');
   if (!modalContainer) {
@@ -324,27 +142,22 @@ function openAddProductModal() {
 
   modalContainer.innerHTML = `
     <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 2000; padding: 1rem;">
-      <div style="background: white; padding: 1.5rem; border-radius: 8px; width: 100%; max-width: 400px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-height: 90vh; overflow-y: auto;">
-        <h3 style="margin-bottom: 1rem; color: var(--primary-dark);">Nouveau produit (Vendeuse)</h3>
-        
-        <form id="add-product-form" onsubmit="uploadProduct(event)">
+      <div style="background: white; padding: 1.5rem; border-radius: 8px; width: 100%; max-width: 400px; max-height: 90vh; overflow-y: auto;">
+        <h3 style="margin-bottom: 1rem; color: #1f2937;">Nouveau produit</h3>
+        <form onsubmit="uploadProduct(event)">
           <div style="margin-bottom: 0.75rem;">
             <label style="display: block; font-size: 0.85rem; margin-bottom: 0.25rem;">Nom de l'article</label>
             <input type="text" id="p-title" required placeholder="ex: Ensemble Pagne" style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 4px;">
           </div>
-
           <div style="margin-bottom: 0.75rem;">
-            <label style="display: block; font-size: 0.85rem; margin-bottom: 0.25rem;">Prix (en XAF)</label>
-            <input type="number" id="p-price" required placeholder="ex: 12000" style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 4px;">
+            <label style="display: block; font-size: 0.85rem; margin-bottom: 0.25rem;">Prix (XAF)</label>
+            <input type="number" id="p-price" required placeholder="15000" style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 4px;">
           </div>
-
           <div style="margin-bottom: 1rem;">
             <label style="display: block; font-size: 0.85rem; margin-bottom: 0.25rem;">Photo de l'article</label>
             <input type="file" id="p-image" accept="image/*" required style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 4px;">
           </div>
-
-          <div id="upload-status" style="margin-bottom: 0.5rem; font-size: 0.85rem; color: var(--primary);"></div>
-
+          <div id="upload-status" style="margin-bottom: 0.5rem; font-size: 0.85rem; color: #d97706;"></div>
           <div style="display: flex; gap: 0.5rem;">
             <button type="submit" id="btn-save-prod" class="btn" style="flex: 1;">Publier</button>
             <button type="button" class="btn btn-secondary" onclick="closeModal()" style="flex: 1;">Annuler</button>
@@ -355,16 +168,16 @@ function openAddProductModal() {
   `;
 }
 
-async function uploadProduct(event) {
-  event.preventDefault();
-
+// Publier le produit sur ImgBB puis Firestore
+async function uploadProduct(e) {
+  e.preventDefault();
   const title = document.getElementById('p-title').value;
   const price = parseInt(document.getElementById('p-price').value, 10);
   const fileInput = document.getElementById('p-image');
   const statusDiv = document.getElementById('upload-status');
   const saveBtn = document.getElementById('btn-save-prod');
 
-  if (fileInput.files.length === 0) {
+  if (!fileInput.files || fileInput.files.length === 0) {
     alert("Veuillez choisir une photo.");
     return;
   }
@@ -373,25 +186,20 @@ async function uploadProduct(event) {
     saveBtn.disabled = true;
     statusDiv.textContent = "Téléversement de la photo...";
 
-    // 1. Préparation de l'image pour l'envoi vers ImgBB
     const formData = new FormData();
     formData.append('image', fileInput.files[0]);
 
-    const response = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
+    const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
       method: 'POST',
       body: formData
     });
 
-    const data = await response.json();
-
-    if (!data.success) {
-      throw new Error("Échec de l'envoi de la photo.");
-    }
+    const data = await res.json();
+    if (!data.success) throw new Error("Impossible d'envoyer l'image.");
 
     const imageUrl = data.data.url;
-    statusDiv.textContent = "Publication de l'article...";
+    statusDiv.textContent = "Publication dans la boutique...";
 
-    // 2. Enregistrement dans Firestore
     await db.collection('products').add({
       title: title,
       price: price,
@@ -403,10 +211,16 @@ async function uploadProduct(event) {
     closeModal();
     alert("Article publié avec succès !");
     loadCatalog();
-  } catch (error) {
-    console.error(error);
-    alert("Erreur lors de la publication : " + error.message);
+  } catch (err) {
+    console.error(err);
+    alert("Erreur : " + err.message);
     statusDiv.textContent = "";
     saveBtn.disabled = false;
   }
+}
+
+// Fermer les modales
+function closeModal() {
+  const modalContainer = document.getElementById('modal-container');
+  if (modalContainer) modalContainer.innerHTML = '';
 }
