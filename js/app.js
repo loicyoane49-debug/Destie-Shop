@@ -310,3 +310,103 @@ function escapeHtml(str) {
   <script src="js/app.js"></script>
 </body>
 </html>
+
+// Clé API ImgBB (Remplacez par votre clé obtenue sur api.imgbb.com)
+const IMGBB_API_KEY = "VOTRE_CLE_API_IMGBB";
+
+function openAddProductModal() {
+  let modalContainer = document.getElementById('modal-container');
+  if (!modalContainer) {
+    modalContainer = document.createElement('div');
+    modalContainer.id = 'modal-container';
+    document.body.appendChild(modalContainer);
+  }
+
+  modalContainer.innerHTML = `
+    <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 2000; padding: 1rem;">
+      <div style="background: white; padding: 1.5rem; border-radius: 8px; width: 100%; max-width: 400px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-height: 90vh; overflow-y: auto;">
+        <h3 style="margin-bottom: 1rem; color: var(--primary-dark);">Nouveau produit (Vendeuse)</h3>
+        
+        <form id="add-product-form" onsubmit="uploadProduct(event)">
+          <div style="margin-bottom: 0.75rem;">
+            <label style="display: block; font-size: 0.85rem; margin-bottom: 0.25rem;">Nom de l'article</label>
+            <input type="text" id="p-title" required placeholder="ex: Ensemble Pagne" style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 4px;">
+          </div>
+
+          <div style="margin-bottom: 0.75rem;">
+            <label style="display: block; font-size: 0.85rem; margin-bottom: 0.25rem;">Prix (en XAF)</label>
+            <input type="number" id="p-price" required placeholder="ex: 12000" style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 4px;">
+          </div>
+
+          <div style="margin-bottom: 1rem;">
+            <label style="display: block; font-size: 0.85rem; margin-bottom: 0.25rem;">Photo de l'article</label>
+            <input type="file" id="p-image" accept="image/*" required style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 4px;">
+          </div>
+
+          <div id="upload-status" style="margin-bottom: 0.5rem; font-size: 0.85rem; color: var(--primary);"></div>
+
+          <div style="display: flex; gap: 0.5rem;">
+            <button type="submit" id="btn-save-prod" class="btn" style="flex: 1;">Publier</button>
+            <button type="button" class="btn btn-secondary" onclick="closeModal()" style="flex: 1;">Annuler</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+}
+
+async function uploadProduct(event) {
+  event.preventDefault();
+
+  const title = document.getElementById('p-title').value;
+  const price = parseInt(document.getElementById('p-price').value, 10);
+  const fileInput = document.getElementById('p-image');
+  const statusDiv = document.getElementById('upload-status');
+  const saveBtn = document.getElementById('btn-save-prod');
+
+  if (fileInput.files.length === 0) {
+    alert("Veuillez choisir une photo.");
+    return;
+  }
+
+  try {
+    saveBtn.disabled = true;
+    statusDiv.textContent = "Téléversement de la photo...";
+
+    // 1. Préparation de l'image pour l'envoi vers ImgBB
+    const formData = new FormData();
+    formData.append('image', fileInput.files[0]);
+
+    const response = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
+      method: 'POST',
+      body: formData
+    });
+
+    const data = await response.json();
+
+    if (!data.success) {
+      throw new Error("Échec de l'envoi de la photo.");
+    }
+
+    const imageUrl = data.data.url;
+    statusDiv.textContent = "Publication de l'article...";
+
+    // 2. Enregistrement dans Firestore
+    await db.collection('products').add({
+      title: title,
+      price: price,
+      images: [imageUrl],
+      isReserved: false,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    closeModal();
+    alert("Article publié avec succès !");
+    loadCatalog();
+  } catch (error) {
+    console.error(error);
+    alert("Erreur lors de la publication : " + error.message);
+    statusDiv.textContent = "";
+    saveBtn.disabled = false;
+  }
+}
