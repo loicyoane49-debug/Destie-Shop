@@ -15,10 +15,12 @@ function setupAuthListener() {
     const headerActions = document.getElementById('header-actions');
     if (!headerActions) return;
 
-    // Si l'utilisateur est connecté et est la vendeuse
-    if (user && user.email.toLowerCase() === SELLER_EMAIL.toLowerCase()) {
+    // Vérifie de manière robuste si c'est la vendeuse
+    const isSeller = user && user.email && user.email.trim().toLowerCase() === SELLER_EMAIL.toLowerCase();
+
+    if (isSeller) {
       headerActions.innerHTML = `
-        <button class="btn" style="background:#d97706; color:white; border:none; padding:0.5rem 0.8rem; border-radius:6px; margin-right:0.5rem; font-weight:bold;" onclick="openAddProductModal()"><i class="fa-solid fa-plus"></i> + Ajouter</button>
+        <button class="btn" style="background:#d97706; color:white; border:none; padding:0.5rem 0.8rem; border-radius:6px; margin-right:0.5rem; font-weight:bold; cursor:pointer;" onclick="openAddProductModal()"><i class="fa-solid fa-plus"></i> + Ajouter</button>
         <button class="btn btn-secondary" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> Déconnexion</button>
       `;
     } else if (user) {
@@ -40,7 +42,6 @@ window.switchView = function(viewName) {
   const container = document.getElementById('app-content');
   if (!container) return;
 
-  // Mise à jour de la classe active sur la barre de navigation
   const navItems = document.querySelectorAll('.bottom-nav .nav-item');
   navItems.forEach(item => item.classList.remove('active'));
 
@@ -170,8 +171,8 @@ window.openLoginModal = function() {
         <div id="auth-error" style="color: #ef4444; font-size: 0.8rem; margin-bottom: 1rem;"></div>
 
         <div style="display:flex; gap: 0.5rem;">
-          <button onclick="submitLogin()" style="flex:1; background:#d97706; color:white; border:none; padding: 0.6rem; border-radius:4px; font-weight:bold;">Valider</button>
-          <button onclick="closeModal()" style="flex:1; background:#4b5563; color:white; border:none; padding: 0.6rem; border-radius:4px;">Annuler</button>
+          <button onclick="submitLogin()" style="flex:1; background:#d97706; color:white; border:none; padding: 0.6rem; border-radius:4px; font-weight:bold; cursor:pointer;">Valider</button>
+          <button onclick="closeModal()" style="flex:1; background:#4b5563; color:white; border:none; padding: 0.6rem; border-radius:4px; cursor:pointer;">Annuler</button>
         </div>
       </div>
     </div>
@@ -189,6 +190,7 @@ window.submitLogin = function() {
     .then(() => {
       closeModal();
       alert("Connexion réussie !");
+      window.location.reload(); // Recharge propre pour fixer l'état de l'interface
     })
     .catch((err) => {
       errDiv.textContent = "Erreur : " + err.message;
@@ -209,7 +211,7 @@ window.closeModal = function() {
   if (addModal) addModal.remove();
 };
 
-// POPUP AJOUT DE PRODUIT (AVEC TELECHARGEMENT DE PHOTO)
+// POPUP AJOUT DE PRODUIT
 window.openAddProductModal = function() {
   let modal = document.getElementById('add-modal');
   if (!modal) {
@@ -235,8 +237,8 @@ window.openAddProductModal = function() {
         <div id="add-error" style="color: #f59e0b; font-size: 0.8rem; margin-bottom: 1rem;"></div>
 
         <div style="display:flex; gap: 0.5rem;">
-          <button id="btn-pub" onclick="submitProduct()" style="flex:1; background:#d97706; color:white; border:none; padding: 0.6rem; border-radius:4px; font-weight:bold;">Publier</button>
-          <button onclick="closeModal()" style="flex:1; background:#4b5563; color:white; border:none; padding: 0.6rem; border-radius:4px;">Annuler</button>
+          <button id="btn-pub" onclick="submitProduct()" style="flex:1; background:#d97706; color:white; border:none; padding: 0.6rem; border-radius:4px; font-weight:bold; cursor:pointer;">Publier</button>
+          <button onclick="closeModal()" style="flex:1; background:#4b5563; color:white; border:none; padding: 0.6rem; border-radius:4px; cursor:pointer;">Annuler</button>
         </div>
       </div>
     </div>
@@ -261,7 +263,6 @@ window.submitProduct = async function() {
   try {
     let imageUrl = "";
 
-    // Si la clé API est fournie, envoie vers ImgBB
     if (IMGBB_API_KEY && IMGBB_API_KEY !== "VOTRE_CLE_IMGBB_ICI") {
       const formData = new FormData();
       formData.append('image', fileInput.files[0]);
@@ -274,7 +275,6 @@ window.submitProduct = async function() {
       if (!data.success) throw new Error("Erreur téléversement image");
       imageUrl = data.data.url;
     } else {
-      // Image temporaire de remplacement si pas encore de clé ImgBB
       imageUrl = "https://via.placeholder.com/400x400.png?text=Vêtement";
     }
 
