@@ -13,8 +13,11 @@
 
   <header>
     <h1>Destie Shop</h1>
-    <div id="auth-header-btn">
-      <button class="btn btn-secondary" onclick="openLoginModal()"><i class="fa-solid fa-user"></i> Connexion</button>
+    <div style="display: flex; gap: 0.5rem;" id="header-actions">
+      <button class="btn" onclick="openAddProductModal()"><i class="fa-solid fa-plus"></i> Ajouter</button>
+      <div id="auth-header-btn">
+        <button class="btn btn-secondary" onclick="openLoginModal()"><i class="fa-solid fa-user"></i> Connexion</button>
+      </div>
     </div>
   </header>
 
