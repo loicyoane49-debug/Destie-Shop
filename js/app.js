@@ -5,6 +5,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadCatalog();
   setupAuthListener();
 });
+
 function setupAuthListener() {
   if (typeof firebase === 'undefined' || !firebase.auth) return;
 
@@ -13,14 +14,18 @@ function setupAuthListener() {
     if (!headerActions) return;
 
     if (user) {
-      // Enregistrer / mettre à jour l'utilisateur dans Firestore automatiquement
-      try {
-        await db.collection('users').doc(user.uid).set({
-          email: user.email,
-          lastLogin: firebase.firestore.FieldValue.serverTimestamp()
-        }, { merge: true });
-      } catch (e) {
-        console.error("Erreur enregistrement user :", e);
+      // On vérifie si ce n'est PAS la vendeuse avant de l'ajouter aux abonnés
+      const isSellerUser = user.email && user.email.trim().toLowerCase() === SELLER_EMAIL.toLowerCase();
+
+      if (!isSellerUser) {
+        try {
+          await db.collection('users').doc(user.uid).set({
+            email: user.email,
+            lastLogin: firebase.firestore.FieldValue.serverTimestamp()
+          }, { merge: true });
+        } catch (e) {
+          console.error("Erreur enregistrement user :", e);
+        }
       }
     }
 
@@ -42,8 +47,6 @@ function setupAuthListener() {
     }
   });
 }
-
-
 
 window.switchView = function(viewName) {
   const container = document.getElementById('app-content');
