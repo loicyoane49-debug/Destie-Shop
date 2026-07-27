@@ -1,4 +1,5 @@
 const SELLER_EMAIL = "primodestiem@gmail.com";
+const VENDEUSE_PHONE = "242066431082"; // Votre numéro WhatsApp
 
 document.addEventListener('DOMContentLoaded', () => {
   loadCatalog();
@@ -83,38 +84,43 @@ async function loadCatalog() {
 
       const card = document.createElement('div');
       card.className = 'product-card';
+
+      // Gestion des badges (Disponible / Réservé / Acheté)
+      let badgeHtml = `<span class="badge" style="background:#d1fae5; color:#065f46; padding:2px 6px; border-radius:4px; font-size:0.75rem;">Disponible</span>`;
+      let buttonHtml = `
+        <button onclick="reserveProduct('${id}')" style="width: 100%; background: #d97706; color: white; border: none; padding: 0.6rem; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 0.85rem;">
+          <i class="fa-solid fa-bookmark"></i> Réserver
+        </button>`;
+
+      if (p.isSold) {
+        badgeHtml = `<span class="badge" style="background:#fee2e2; color:#991b1b; padding:2px 6px; border-radius:4px; font-size:0.75rem; font-weight:bold;">ACHETÉ</span>`;
+        buttonHtml = `
+          <button disabled style="width: 100%; background: #ef4444; color: white; border: none; padding: 0.6rem; border-radius: 6px; font-weight: bold; cursor: not-allowed; font-size: 0.85rem;">
+            Vendu
+          </button>`;
+      } else if (p.isReserved) {
+        badgeHtml = `<span class="badge" style="background:#fef3c7; color:#92400e; padding:2px 6px; border-radius:4px; font-size:0.75rem;">Déjà réservé</span>`;
+        buttonHtml = `
+          <button disabled style="width: 100%; background: #9ca3af; color: white; border: none; padding: 0.6rem; border-radius: 6px; font-weight: bold; cursor: not-allowed; font-size: 0.85rem;">
+            Non disponible
+          </button>`;
+      }
+
       card.innerHTML = `
         <div class="product-image">
           <img src="${imageUrl}" alt="${p.title || 'Article'}">
         </div>
         <div class="product-info" style="padding: 0.8rem;">
-          <span class="badge" style="background:${p.isReserved ? '#fee2e2' : '#d1fae5'}; color:${p.isReserved ? '#991b1b' : '#065f46'}; padding:2px 6px; border-radius:4px; font-size:0.75rem;">
-            ${p.isReserved ? 'Déjà réservé' : 'Disponible'}
-          </span>
+          ${badgeHtml}
           <h3 class="product-title" style="margin: 0.5rem 0 0.2rem 0; font-size: 1rem;">${p.title || 'Article'}</h3>
           <p class="product-price" style="color: #d97706; font-weight: bold; font-size: 0.95rem; margin-bottom: 0.8rem;">${p.price ? p.price.toLocaleString('fr-FR') : 0} XAF</p>
-          
-          ${!p.isReserved ? `
-            <button onclick="reserveProduct('${id}')" style="width: 100%; background: #d97706; color: white; border: none; padding: 0.6rem; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 0.85rem;">
-              <i class="fa-solid fa-bookmark"></i> Réserver
-            </button>
-          ` : `
-            <button disabled style="width: 100%; background: #9ca3af; color: white; border: none; padding: 0.6rem; border-radius: 6px; font-weight: bold; cursor: not-allowed; font-size: 0.85rem;">
-              Non disponible
-            </button>
-          `}
+          ${buttonHtml}
         </div>
       `;
       productList.appendChild(card);
     });
   } catch (err) {
     console.error("Erreur catalogue :", err);
-    productList.innerHTML = `
-      <div style="grid-column: 1/-1; text-align: center; padding: 3rem 1rem;">
-        <i class="fa-solid fa-store" style="font-size: 3rem; color: #d1d5db; margin-bottom: 1rem;"></i>
-        <h3 style="color: #4b5563;">Erreur de chargement du catalogue</h3>
-      </div>
-    `;
   }
 }
 
@@ -126,9 +132,13 @@ window.reserveProduct = async function(productId) {
     return;
   }
 
-  if (!confirm("Voulez-vous vraiment réserver cet article ?")) return;
+  if (!confirm("Voulez-vous réserver cet article ? Vous allez être redirigé vers notre WhatsApp.")) return;
 
   try {
+    const doc = await db.collection('products').doc(productId).get();
+    const productData = doc.data();
+
+    // Mettre à jour Firebase
     await db.collection('products').doc(productId).update({
       isReserved: true,
       reservedBy: user.uid,
@@ -142,10 +152,33 @@ window.reserveProduct = async function(productId) {
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
 
-    alert("Article réservé avec succès ! Retrouvez vos réservations dans le menu du bas.");
-    loadCatalog();
+    // Envoi sur WhatsApp
+    const clientName = user.email.replace('@destieshop.local', '');
+    const textMsg = `Bonjour Destie Shop ! Je souhaite réserver l'article : *${productData.title}* (${productData.price} XAF).\nMon contact : ${clientName}`;
+    const waUrl = `https://wa.me/${VENDEUSE_PHONE}?text=${encodeURIComponent(textMsg)}`;
+
+    alert("Réservation enregistrée ! Redirection vers WhatsApp...");
+    window.location.href = waUrl;
+
   } catch (err) {
     alert("Erreur lors de la réservation : " + err.message);
+  }
+};
+
+// Fonction pour que la vendeuse marque un produit comme ACHETÉ
+window.markAsSold = async function(productId) {
+  if (!confirm("Confirmer la réception du paiement ? L'article sera marqué comme ACHETÉ.")) return;
+
+  try {
+    await db.collection('products').doc(productId).update({
+      isSold: true,
+      isReserved: false
+    });
+
+    alert("L'article est maintenant marqué comme ACHETÉ !");
+    loadCatalog();
+  } catch (err) {
+    alert("Erreur : " + err.message);
   }
 };
 
@@ -177,8 +210,8 @@ async function loadReservationsView() {
     if (snapshot.empty) {
       container.innerHTML = `
         <div style="padding: 2rem; text-align: center;">
-          <h3>Mes Réservations</h3>
-          <p style="color: #6b7280; margin-top: 0.5rem;">Aucune réservation enregistrée pour le moment.</p>
+          <h3>Réservations</h3>
+          <p style="color: #6b7280; margin-top: 0.5rem;">Aucune réservation en cours.</p>
         </div>
       `;
       return;
@@ -186,20 +219,28 @@ async function loadReservationsView() {
 
     let html = `
       <div style="padding: 1rem;">
-        <h3 style="margin-bottom: 1rem;">${isSeller ? 'Toutes les réservations (Vendeuse)' : 'Mes Réservations'}</h3>
+        <h3 style="margin-bottom: 1rem;">${isSeller ? 'Réservations en cours (Vendeuse)' : 'Mes Réservations'}</h3>
         <div class="product-grid">
     `;
 
     snapshot.forEach(doc => {
       const p = doc.data();
+      const id = doc.id;
       const imageUrl = (p.images && p.images.length > 0) ? p.images[0] : 'https://via.placeholder.com/300';
+      const clientContact = (p.reservedByEmail || 'Client').replace('@destieshop.local', '');
+
       html += `
         <div class="product-card">
           <div class="product-image"><img src="${imageUrl}"></div>
           <div class="product-info" style="padding:0.8rem;">
             <h3>${p.title || 'Article'}</h3>
             <p style="color:#d97706; font-weight:bold;">${p.price} XAF</p>
-            ${isSeller ? `<p style="font-size:0.8rem; color:#4b5563; margin-top:0.3rem;">Réservé par : <strong>${p.reservedByEmail || 'Client'}</strong></p>` : ''}
+            ${isSeller ? `
+              <p style="font-size:0.85rem; color:#4b5563; margin:0.4rem 0;">Client : <strong>${clientContact}</strong></p>
+              <button onclick="markAsSold('${id}')" style="width:100%; background:#10b981; color:white; border:none; padding:0.5rem; border-radius:5px; font-weight:bold; cursor:pointer; margin-top:0.3rem;">
+                <i class="fa-solid fa-check"></i> Valider la vente (Acheté)
+              </button>
+            ` : ''}
           </div>
         </div>
       `;
@@ -213,15 +254,34 @@ async function loadReservationsView() {
   }
 }
 
-function loadProfileView() {
+async function loadProfileView() {
   const container = document.getElementById('app-content');
   const user = firebase.auth().currentUser;
 
   if (user) {
+    const isSeller = user.email && user.email.trim().toLowerCase() === SELLER_EMAIL.toLowerCase();
+    const displayUser = user.email.replace('@destieshop.local', '');
+
+    let sellerStatsHtml = '';
+    if (isSeller) {
+      try {
+        const resSnap = await db.collection('reservations').get();
+        // Compte des réservations uniques pour estimer l'activité
+        sellerStatsHtml = `
+          <div style="margin-top: 1rem; padding: 1rem; background: #feF3c7; border-radius: 6px; color: #92400e;">
+            <h4 style="margin-bottom:0.3rem;">📊 Tableau de bord Vendeuse</h4>
+            <p style="font-size:0.9rem;">Total de réservations enregistrées : <strong>${resSnap.size}</strong></p>
+            <p style="font-size:0.8rem; margin-top:0.4rem; color:#b45309;">*(Pour la liste détaillée des utilisateurs inscrits, consultez l'onglet Authentication de Firebase)*</p>
+          </div>
+        `;
+      } catch(e) {}
+    }
+
     container.innerHTML = `
       <div style="padding: 1.5rem; background: white; border-radius: 8px; margin: 1rem;">
         <h3 style="margin-bottom: 0.5rem;">Mon Profil</h3>
-        <p style="color: #4b5563;">Identifiant / Contact : <strong>${user.email}</strong></p>
+        <p style="color: #4b5563;">Identifiant : <strong>${displayUser}</strong></p>
+        ${sellerStatsHtml}
         <button class="btn btn-secondary" style="margin-top: 1.5rem; background:#4b5563; color:white; border:none; padding:0.5rem 1rem; border-radius:6px; cursor:pointer;" onclick="logout()">Déconnexion</button>
       </div>
     `;
@@ -250,7 +310,7 @@ window.openLoginModal = function(isSignup = false) {
         <h3 style="margin-bottom: 1rem; color: #f59e0b;">${isSignup ? 'Créer un compte Client' : 'Connexion'}</h3>
         
         <label style="display:block; font-size:0.85rem; margin-bottom: 0.25rem;">Numéro de téléphone ou Email</label>
-        <input type="text" id="auth-email" placeholder="ex: 061234567" style="width:100%; padding: 0.5rem; margin-bottom: 1rem; border-radius:4px; border:1px solid #4b5563; background:#374151; color:white;">
+        <input type="text" id="auth-email" placeholder="ex: 066431082" style="width:100%; padding: 0.5rem; margin-bottom: 1rem; border-radius:4px; border:1px solid #4b5563; background:#374151; color:white;">
         
         <label style="display:block; font-size:0.85rem; margin-bottom: 0.25rem;">Mot de passe</label>
         <input type="password" id="auth-pass" placeholder="••••••••" style="width:100%; padding: 0.5rem; margin-bottom: 1rem; border-radius:4px; border:1px solid #4b5563; background:#374151; color:white;">
@@ -285,7 +345,6 @@ window.submitAuth = function(isSignup) {
     return;
   }
 
-  // Si l'utilisateur entre un simple numéro, on le formate en faux email Firebase
   let email = inputVal;
   if (!inputVal.includes('@')) {
     const cleanPhone = inputVal.replace(/\D/g, '');
@@ -423,6 +482,7 @@ window.submitProduct = async function() {
       price: price,
       images: [imageUrl],
       isReserved: false,
+      isSold: false,
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
 
