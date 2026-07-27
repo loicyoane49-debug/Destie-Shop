@@ -175,41 +175,101 @@ async function loadCatalog() {
   }
 }
 
-// --- MODIFIER / SUPPRIMER ARTICLE (VENDEUSE) ---
+// --- MODIFIER / SUPPRIMER ARTICLE (COMPATIBLE ANDROID WEBVIEW) ---
+
 window.editProduct = function(id, oldTitle, oldPrice) {
-  const newTitle = prompt("Nouveau nom de l'article :", oldTitle);
-  if (newTitle === null) return;
+  let modal = document.getElementById('edit-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'edit-modal';
+    document.body.appendChild(modal);
+  }
 
-  const newPriceStr = prompt("Nouveau prix (XAF) :", oldPrice);
-  if (newPriceStr === null) return;
+  modal.innerHTML = `
+    <div style="position: fixed; top:0; left:0; right:0; bottom:0; background: rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center; z-index:9999; padding: 1rem;">
+      <div style="background: #1f2937; color: white; padding: 1.5rem; border-radius: 8px; width: 100%; max-width: 350px;">
+        <h3 style="margin-bottom: 1rem; color: #f59e0b;">Modifier l'article</h3>
+        
+        <label style="display:block; font-size:0.85rem; margin-bottom: 0.25rem;">Nom de l'article</label>
+        <input type="text" id="edit-title" value="${oldTitle}" style="width:100%; padding: 0.5rem; margin-bottom: 1rem; border-radius:4px; border:1px solid #4b5563; background:#374151; color:white;">
+        
+        <label style="display:block; font-size:0.85rem; margin-bottom: 0.25rem;">Prix (XAF)</label>
+        <input type="number" id="edit-price" value="${oldPrice}" style="width:100%; padding: 0.5rem; margin-bottom: 1rem; border-radius:4px; border:1px solid #4b5563; background:#374151; color:white;">
+        
+        <div id="edit-error" style="color: #ef4444; font-size: 0.8rem; margin-bottom: 1rem;"></div>
 
-  const newPrice = parseInt(newPriceStr, 10);
-  if (!newTitle.trim() || isNaN(newPrice)) {
-    alert("Veuillez saisir des informations valides.");
+        <div style="display:flex; gap: 0.5rem;">
+          <button onclick="saveProductEdit('${id}')" style="flex:1; background:#3b82f6; color:white; border:none; padding: 0.6rem; border-radius:4px; font-weight:bold; cursor:pointer;">Enregistrer</button>
+          <button onclick="closeEditModal()" style="flex:1; background:#4b5563; color:white; border:none; padding: 0.6rem; border-radius:4px; cursor:pointer;">Annuler</button>
+        </div>
+      </div>
+    </div>
+  `;
+};
+
+window.saveProductEdit = function(id) {
+  const newTitle = document.getElementById('edit-title').value.trim();
+  const newPrice = parseInt(document.getElementById('edit-price').value, 10);
+  const errDiv = document.getElementById('edit-error');
+
+  if (!newTitle || isNaN(newPrice)) {
+    errDiv.textContent = "Veuillez remplir correctement les champs.";
     return;
   }
 
   db.collection('products').doc(id).update({
-    title: newTitle.trim(),
+    title: newTitle,
     price: newPrice
   }).then(() => {
-    alert("Article mis à jour avec succès !");
+    closeEditModal();
     loadCatalog();
   }).catch((err) => {
-    alert("Erreur de modification : " + err.message);
+    errDiv.textContent = "Erreur : " + err.message;
   });
 };
 
-window.deleteProduct = async function(id) {
-  if (!confirm("Voulez-vous vraiment supprimer cet article de la boutique ?")) return;
+window.closeEditModal = function() {
+  const modal = document.getElementById('edit-modal');
+  if (modal) modal.remove();
+};
 
+window.deleteProduct = function(id) {
+  let modal = document.getElementById('delete-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'delete-modal';
+    document.body.appendChild(modal);
+  }
+
+  modal.innerHTML = `
+    <div style="position: fixed; top:0; left:0; right:0; bottom:0; background: rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center; z-index:9999; padding: 1rem;">
+      <div style="background: #1f2937; color: white; padding: 1.5rem; border-radius: 8px; width: 100%; max-width: 350px; text-align: center;">
+        <i class="fa-solid fa-triangle-exclamation" style="font-size: 2.5rem; color: #ef4444; margin-bottom: 0.8rem;"></i>
+        <h3 style="margin-bottom: 0.5rem;">Supprimer l'article ?</h3>
+        <p style="color: #9ca3af; font-size: 0.85rem; margin-bottom: 1.2rem;">Cette action est définitive et retirera l'article de la boutique.</p>
+        
+        <div style="display:flex; gap: 0.5rem;">
+          <button onclick="confirmDeleteProduct('${id}')" style="flex:1; background:#dc2626; color:white; border:none; padding: 0.6rem; border-radius:4px; font-weight:bold; cursor:pointer;">Supprimer</button>
+          <button onclick="closeDeleteModal()" style="flex:1; background:#4b5563; color:white; border:none; padding: 0.6rem; border-radius:4px; cursor:pointer;">Annuler</button>
+        </div>
+      </div>
+    </div>
+  `;
+};
+
+window.confirmDeleteProduct = async function(id) {
   try {
     await db.collection('products').doc(id).delete();
-    alert("Article supprimé.");
+    closeDeleteModal();
     loadCatalog();
   } catch (err) {
     alert("Erreur lors de la suppression : " + err.message);
   }
+};
+
+window.closeDeleteModal = function() {
+  const modal = document.getElementById('delete-modal');
+  if (modal) modal.remove();
 };
 
 window.reserveProduct = async function(productId) {
@@ -516,7 +576,6 @@ window.openLoginModal = function(isSignup = false) {
   `;
 };
 
-// --- MODIFICATION MAJEURE DE L'ÉTAPE 2 (CONNEXION FLUIDE ET SANS RELOAD) ---
 window.submitAuth = function(isSignup) {
   let inputVal = document.getElementById('auth-email').value.trim();
   const pass = document.getElementById('auth-pass').value;
