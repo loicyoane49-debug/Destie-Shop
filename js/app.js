@@ -1,5 +1,5 @@
 const SELLER_EMAIL = "primodestiem@gmail.com";
-const VENDEUSE_PHONE = "242066431082"; // Votre numéro WhatsApp
+const VENDEUSE_PHONE = "242066431082"; // Numéro WhatsApp de la vendeuse
 
 document.addEventListener('DOMContentLoaded', () => {
   // Activer la persistance locale pour Firebase (Essentiel pour la WebView Sketchware)
@@ -8,8 +8,11 @@ document.addEventListener('DOMContentLoaded', () => {
       .catch((error) => console.error("Erreur persistance :", error));
   }
 
-  loadCatalog();
+  // Écouter l'état de connexion utilisateur
   setupAuthListener();
+
+  // Charger la vue par défaut (Catalogue)
+  switchView('catalog');
 });
 
 function setupAuthListener() {
@@ -23,7 +26,7 @@ function setupAuthListener() {
       const sellerEmailClean = SELLER_EMAIL.trim().toLowerCase();
       const isSellerUser = (userEmailClean === sellerEmailClean);
 
-      // On enregistre les clients (non vendeuse) dans la base users
+      // Enregistrer les clients (non vendeuse) dans la collection users
       if (!isSellerUser) {
         try {
           await db.collection('users').doc(user.uid).set({
@@ -54,9 +57,6 @@ function setupAuthListener() {
         `;
       }
     }
-
-    // Mettre à jour la vue courante sans recharger la WebView
-    loadCatalog();
   });
 }
 
@@ -140,7 +140,7 @@ async function loadCatalog() {
           </button>`;
       }
 
-      // Actions Vendeuse (Modifier / Supprimer)
+      // Controls Vendeuse
       let sellerControls = '';
       if (isSeller) {
         const safeTitle = (p.title || 'Article').replace(/'/g, "\\'");
@@ -175,7 +175,7 @@ async function loadCatalog() {
   }
 }
 
-// --- MODIFIER / SUPPRIMER ARTICLE (COMPATIBLE ANDROID WEBVIEW) ---
+// --- MODIFIER / SUPPRIMER ARTICLE ---
 
 window.editProduct = function(id, oldTitle, oldPrice) {
   let modal = document.getElementById('edit-modal');
@@ -553,7 +553,7 @@ window.openLoginModal = function(isSignup = false) {
         <label style="display:block; font-size:0.85rem; margin-bottom: 0.25rem;">Numéro de téléphone ou Email</label>
         <input type="text" id="auth-email" placeholder="ex: 066431082" style="width:100%; padding: 0.5rem; margin-bottom: 1rem; border-radius:4px; border:1px solid #4b5563; background:#374151; color:white;">
         
-        <label style="display:block; font-size:0.85rem; margin-bottom: 0.25rem;">Mot de passe</label>
+        <label style="display:block; font-size:0.85rem; margin-bottom: 0.25rem;">Mot de passe (au moins 6 caractères)</label>
         <input type="password" id="auth-pass" placeholder="••••••••" style="width:100%; padding: 0.5rem; margin-bottom: 1rem; border-radius:4px; border:1px solid #4b5563; background:#374151; color:white;">
         
         <div id="auth-error" style="color: #ef4444; font-size: 0.8rem; margin-bottom: 1rem;"></div>
@@ -586,7 +586,11 @@ window.submitAuth = function(isSignup) {
     return;
   }
 
-  // Convertir systématiquement en minuscules pour éviter les conflits d'authentification
+  if (pass.length < 6) {
+    errDiv.textContent = "Le mot de passe doit faire au moins 6 caractères.";
+    return;
+  }
+
   let email = inputVal.toLowerCase();
   if (!inputVal.includes('@')) {
     const cleanPhone = inputVal.replace(/\D/g, '');
@@ -605,6 +609,7 @@ window.submitAuth = function(isSignup) {
 
         closeModal();
         alert("Compte créé avec succès ! Vous êtes connecté.");
+        switchView('catalog');
       })
       .catch((err) => {
         errDiv.textContent = "Erreur : " + err.message;
@@ -614,6 +619,7 @@ window.submitAuth = function(isSignup) {
       .then(() => {
         closeModal();
         alert("Connexion réussie !");
+        switchView('catalog');
       })
       .catch((err) => {
         errDiv.textContent = "Erreur : " + err.message;
