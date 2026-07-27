@@ -2,6 +2,12 @@ const SELLER_EMAIL = "primodestiem@gmail.com";
 const VENDEUSE_PHONE = "242066431082"; // Votre numéro WhatsApp
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Activer la persistance locale pour Firebase (Essentiel pour la WebView Sketchware)
+  if (typeof firebase !== 'undefined' && firebase.auth) {
+    firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+      .catch((error) => console.error("Erreur persistance :", error));
+  }
+
   loadCatalog();
   setupAuthListener();
 });
@@ -11,12 +17,13 @@ function setupAuthListener() {
 
   firebase.auth().onAuthStateChanged(async (user) => {
     const headerActions = document.getElementById('header-actions');
-    if (!headerActions) return;
 
-    if (user) {
-      // On vérifie si ce n'est PAS la vendeuse avant de l'ajouter aux abonnés
-      const isSellerUser = user.email && user.email.trim().toLowerCase() === SELLER_EMAIL.toLowerCase();
+    if (user && user.email) {
+      const userEmailClean = user.email.trim().toLowerCase();
+      const sellerEmailClean = SELLER_EMAIL.trim().toLowerCase();
+      const isSellerUser = (userEmailClean === sellerEmailClean);
 
+      // On enregistre les clients (non vendeuse) dans la base users
       if (!isSellerUser) {
         try {
           await db.collection('users').doc(user.uid).set({
@@ -27,24 +34,29 @@ function setupAuthListener() {
           console.error("Erreur enregistrement user :", e);
         }
       }
-    }
 
-    const isSeller = user && user.email && user.email.trim().toLowerCase() === SELLER_EMAIL.toLowerCase();
-
-    if (isSeller) {
-      headerActions.innerHTML = `
-        <button class="btn" style="background:#d97706; color:white; border:none; padding:0.5rem 0.8rem; border-radius:6px; margin-right:0.5rem; font-weight:bold; cursor:pointer;" onclick="openAddProductModal()"><i class="fa-solid fa-plus"></i> + Ajouter</button>
-        <button class="btn btn-secondary" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> Déconnexion</button>
-      `;
-    } else if (user) {
-      headerActions.innerHTML = `
-        <button class="btn btn-secondary" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> Déconnexion</button>
-      `;
+      if (headerActions) {
+        if (isSellerUser) {
+          headerActions.innerHTML = `
+            <button class="btn" style="background:#d97706; color:white; border:none; padding:0.4rem 0.6rem; border-radius:6px; margin-right:0.3rem; font-weight:bold; cursor:pointer; font-size:0.8rem;" onclick="openAddProductModal()"><i class="fa-solid fa-plus"></i> + Ajouter</button>
+            <button class="btn btn-secondary" style="background:#4b5563; color:white; border:none; padding:0.4rem 0.6rem; border-radius:6px; cursor:pointer; font-size:0.8rem;" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> Déconnexion</button>
+          `;
+        } else {
+          headerActions.innerHTML = `
+            <button class="btn btn-secondary" style="background:#4b5563; color:white; border:none; padding:0.4rem 0.6rem; border-radius:6px; cursor:pointer; font-size:0.8rem;" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> Déconnexion</button>
+          `;
+        }
+      }
     } else {
-      headerActions.innerHTML = `
-        <button class="btn btn-secondary" onclick="openLoginModal(false)"><i class="fa-solid fa-user"></i> Connexion</button>
-      `;
+      if (headerActions) {
+        headerActions.innerHTML = `
+          <button class="btn btn-secondary" style="background:#374151; color:white; border:1px solid #4b5563; padding:0.4rem 0.8rem; border-radius:6px; cursor:pointer; font-size:0.85rem;" onclick="openLoginModal(false)"><i class="fa-solid fa-user"></i> Connexion</button>
+        `;
+      }
     }
+
+    // Mettre à jour la vue courante sans recharger la WebView
+    loadCatalog();
   });
 }
 
@@ -131,7 +143,6 @@ async function loadCatalog() {
       // Actions Vendeuse (Modifier / Supprimer)
       let sellerControls = '';
       if (isSeller) {
-        // Échapper le titre pour le passer proprement dans l'attribut HTML
         const safeTitle = (p.title || 'Article').replace(/'/g, "\\'");
         sellerControls = `
           <div style="display:flex; gap:0.4rem; margin-top:0.5rem; border-top:1px solid #eee; padding-top:0.5rem;">
@@ -167,10 +178,10 @@ async function loadCatalog() {
 // --- MODIFIER / SUPPRIMER ARTICLE (VENDEUSE) ---
 window.editProduct = function(id, oldTitle, oldPrice) {
   const newTitle = prompt("Nouveau nom de l'article :", oldTitle);
-  if (newTitle === null) return; // Annulé
+  if (newTitle === null) return;
 
   const newPriceStr = prompt("Nouveau prix (XAF) :", oldPrice);
-  if (newPriceStr === null) return; // Annulé
+  if (newPriceStr === null) return;
 
   const newPrice = parseInt(newPriceStr, 10);
   if (!newTitle.trim() || isNaN(newPrice)) {
@@ -240,7 +251,6 @@ window.reserveProduct = async function(productId) {
   }
 };
 
-// 1. Vendeuse marque l'article comme VENDU
 window.markAsSold = async function(productId) {
   if (!confirm("Confirmer la vente de cet article ? Il sera définitivement marqué comme VENDU et passera dans les Achats du client.")) return;
 
@@ -257,7 +267,6 @@ window.markAsSold = async function(productId) {
   }
 };
 
-// 2. Vendeuse annule la réservation (si non réglé)
 window.cancelReservation = async function(productId) {
   if (!confirm("Voulez-vous annuler cette réservation ? L'article redeviendra disponible dans le catalogue.")) return;
 
@@ -275,7 +284,6 @@ window.cancelReservation = async function(productId) {
   }
 };
 
-// --- ONGLET RÉSERVATIONS (Articles EN COURS de réservation) ---
 async function loadReservationsView() {
   const container = document.getElementById('app-content');
   const user = firebase.auth().currentUser;
@@ -296,7 +304,6 @@ async function loadReservationsView() {
   try {
     const isSeller = user.email && user.email.trim().toLowerCase() === SELLER_EMAIL.toLowerCase();
     
-    // On ne prend QUE les articles avec isReserved == true (et pas les VENDUS)
     let query = isSeller 
       ? db.collection('products').where('isReserved', '==', true)
       : db.collection('products').where('reservedBy', '==', user.uid).where('isReserved', '==', true);
@@ -357,7 +364,6 @@ async function loadReservationsView() {
   }
 }
 
-// --- NOUVEAU : ONGLET MES ACHATS (Articles Payés / Vendus) ---
 async function loadPurchasesView() {
   const container = document.getElementById('app-content');
   const user = firebase.auth().currentUser;
@@ -378,7 +384,6 @@ async function loadPurchasesView() {
   try {
     const isSeller = user.email && user.email.trim().toLowerCase() === SELLER_EMAIL.toLowerCase();
 
-    // Filtre les articles VENDUS
     let query = isSeller
       ? db.collection('products').where('isSold', '==', true)
       : db.collection('products').where('reservedBy', '==', user.uid).where('isSold', '==', true);
@@ -511,6 +516,7 @@ window.openLoginModal = function(isSignup = false) {
   `;
 };
 
+// --- MODIFICATION MAJEURE DE L'ÉTAPE 2 (CONNEXION FLUIDE ET SANS RELOAD) ---
 window.submitAuth = function(isSignup) {
   let inputVal = document.getElementById('auth-email').value.trim();
   const pass = document.getElementById('auth-pass').value;
@@ -521,7 +527,8 @@ window.submitAuth = function(isSignup) {
     return;
   }
 
-  let email = inputVal;
+  // Convertir systématiquement en minuscules pour éviter les conflits d'authentification
+  let email = inputVal.toLowerCase();
   if (!inputVal.includes('@')) {
     const cleanPhone = inputVal.replace(/\D/g, '');
     email = `${cleanPhone}@destieshop.local`;
@@ -539,7 +546,6 @@ window.submitAuth = function(isSignup) {
 
         closeModal();
         alert("Compte créé avec succès ! Vous êtes connecté.");
-        window.location.reload();
       })
       .catch((err) => {
         errDiv.textContent = "Erreur : " + err.message;
@@ -549,7 +555,6 @@ window.submitAuth = function(isSignup) {
       .then(() => {
         closeModal();
         alert("Connexion réussie !");
-        window.location.reload();
       })
       .catch((err) => {
         errDiv.textContent = "Erreur : " + err.message;
@@ -560,7 +565,7 @@ window.submitAuth = function(isSignup) {
 window.logout = function() {
   firebase.auth().signOut().then(() => {
     alert("Déconnecté !");
-    window.location.reload();
+    switchView('catalog');
   });
 };
 
