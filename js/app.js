@@ -85,7 +85,7 @@ async function loadCatalog() {
       const card = document.createElement('div');
       card.className = 'product-card';
 
-      // Gestion des badges (Disponible / Réservé / Acheté)
+      // Gestion des badges (Disponible / Déjà réservé / VENDU)
       let badgeHtml = `<span class="badge" style="background:#d1fae5; color:#065f46; padding:2px 6px; border-radius:4px; font-size:0.75rem;">Disponible</span>`;
       let buttonHtml = `
         <button onclick="reserveProduct('${id}')" style="width: 100%; background: #d97706; color: white; border: none; padding: 0.6rem; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 0.85rem;">
@@ -93,7 +93,7 @@ async function loadCatalog() {
         </button>`;
 
       if (p.isSold) {
-        badgeHtml = `<span class="badge" style="background:#fee2e2; color:#991b1b; padding:2px 6px; border-radius:4px; font-size:0.75rem; font-weight:bold;">ACHETÉ</span>`;
+        badgeHtml = `<span class="badge" style="background:#fee2e2; color:#991b1b; padding:2px 6px; border-radius:4px; font-size:0.75rem; font-weight:bold;">VENDU</span>`;
         buttonHtml = `
           <button disabled style="width: 100%; background: #ef4444; color: white; border: none; padding: 0.6rem; border-radius: 6px; font-weight: bold; cursor: not-allowed; font-size: 0.85rem;">
             Vendu
@@ -165,9 +165,9 @@ window.reserveProduct = async function(productId) {
   }
 };
 
-// Fonction pour que la vendeuse marque un produit comme ACHETÉ
+// 1. Vendeuse marque l'article comme VENDU
 window.markAsSold = async function(productId) {
-  if (!confirm("Confirmer la réception du paiement ? L'article sera marqué comme ACHETÉ.")) return;
+  if (!confirm("Confirmer la vente de cet article ? Il sera définitivement marqué comme VENDU.")) return;
 
   try {
     await db.collection('products').doc(productId).update({
@@ -175,10 +175,28 @@ window.markAsSold = async function(productId) {
       isReserved: false
     });
 
-    alert("L'article est maintenant marqué comme ACHETÉ !");
+    alert("L'article est maintenant marqué comme VENDU !");
     loadCatalog();
   } catch (err) {
     alert("Erreur : " + err.message);
+  }
+};
+
+// 2. Vendeuse annule la réservation (si non réglé)
+window.cancelReservation = async function(productId) {
+  if (!confirm("Voulez-vous annuler cette réservation ? L'article redeviendra disponible dans le catalogue.")) return;
+
+  try {
+    await db.collection('products').doc(productId).update({
+      isReserved: false,
+      reservedBy: firebase.firestore.FieldValue.delete(),
+      reservedByEmail: firebase.firestore.FieldValue.delete()
+    });
+
+    alert("Réservation annulée. L'article est de nouveau disponible !");
+    loadReservationsView();
+  } catch (err) {
+    alert("Erreur lors de l'annulation : " + err.message);
   }
 };
 
@@ -237,8 +255,13 @@ async function loadReservationsView() {
             <p style="color:#d97706; font-weight:bold;">${p.price} XAF</p>
             ${isSeller ? `
               <p style="font-size:0.85rem; color:#4b5563; margin:0.4rem 0;">Client : <strong>${clientContact}</strong></p>
+              
               <button onclick="markAsSold('${id}')" style="width:100%; background:#10b981; color:white; border:none; padding:0.5rem; border-radius:5px; font-weight:bold; cursor:pointer; margin-top:0.3rem;">
-                <i class="fa-solid fa-check"></i> Valider la vente (Acheté)
+                <i class="fa-solid fa-check"></i> Valider la vente (VENDU)
+              </button>
+              
+              <button onclick="cancelReservation('${id}')" style="width:100%; background:#ef4444; color:white; border:none; padding:0.5rem; border-radius:5px; font-weight:bold; cursor:pointer; margin-top:0.3rem;">
+                <i class="fa-solid fa-xmark"></i> Annuler la réservation
               </button>
             ` : ''}
           </div>
@@ -265,16 +288,19 @@ async function loadProfileView() {
     let sellerStatsHtml = '';
     if (isSeller) {
       try {
-        const resSnap = await db.collection('reservations').get();
-        // Compte des réservations uniques pour estimer l'activité
+        // Récupérer le nombre total d'utilisateurs inscrits (abonnés)
+        const usersSnap = await db.collection('users').get();
+        const totalUsers = usersSnap.size;
+
         sellerStatsHtml = `
           <div style="margin-top: 1rem; padding: 1rem; background: #feF3c7; border-radius: 6px; color: #92400e;">
-            <h4 style="margin-bottom:0.3rem;">📊 Tableau de bord Vendeuse</h4>
-            <p style="font-size:0.9rem;">Total de réservations enregistrées : <strong>${resSnap.size}</strong></p>
-            <p style="font-size:0.8rem; margin-top:0.4rem; color:#b45309;">*(Pour la liste détaillée des utilisateurs inscrits, consultez l'onglet Authentication de Firebase)*</p>
+            <h4 style="margin-bottom:0.5rem;"><i class="fa-solid fa-chart-line"></i> Tableau de bord Vendeuse</h4>
+            <p style="font-size:0.95rem; margin-bottom:0.3rem;">👥 Nombre d'abonnés (clients inscrits) : <strong>${totalUsers}</strong></p>
           </div>
         `;
-      } catch(e) {}
+      } catch(e) {
+        console.error(e);
+      }
     }
 
     container.innerHTML = `
@@ -355,7 +381,13 @@ window.submitAuth = function(isSignup) {
 
   if (isSignup) {
     firebase.auth().createUserWithEmailAndPassword(email, pass)
-      .then(() => {
+      .then(async (cred) => {
+        // Enregistrer l'utilisateur dans Firestore pour le compteur d'abonnés
+        await db.collection('users').doc(cred.user.uid).set({
+          email: email,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
         closeModal();
         alert("Compte créé avec succès ! Vous êtes connecté.");
         window.location.reload();
