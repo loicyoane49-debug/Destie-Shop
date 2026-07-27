@@ -62,8 +62,11 @@ window.switchView = function(viewName) {
   } else if (viewName === 'reservations') {
     if (navItems[1]) navItems[1].classList.add('active');
     loadReservationsView();
-  } else if (viewName === 'profile') {
+  } else if (viewName === 'purchases') {
     if (navItems[2]) navItems[2].classList.add('active');
+    loadPurchasesView();
+  } else if (viewName === 'profile') {
+    if (navItems[3]) navItems[3].classList.add('active');
     loadProfileView();
   }
 };
@@ -77,6 +80,9 @@ async function loadCatalog() {
     container.innerHTML = `<div class="product-grid" id="product-list"></div>`;
     productList = document.getElementById('product-list');
   }
+
+  const user = firebase.auth().currentUser;
+  const isSeller = user && user.email && user.email.trim().toLowerCase() === SELLER_EMAIL.toLowerCase();
 
   try {
     const snapshot = await db.collection('products').get();
@@ -101,7 +107,7 @@ async function loadCatalog() {
       const card = document.createElement('div');
       card.className = 'product-card';
 
-      // Gestion des badges (Disponible / Déjà réservé / VENDU)
+      // Badges
       let badgeHtml = `<span class="badge" style="background:#d1fae5; color:#065f46; padding:2px 6px; border-radius:4px; font-size:0.75rem;">Disponible</span>`;
       let buttonHtml = `
         <button onclick="reserveProduct('${id}')" style="width: 100%; background: #d97706; color: white; border: none; padding: 0.6rem; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 0.85rem;">
@@ -122,6 +128,23 @@ async function loadCatalog() {
           </button>`;
       }
 
+      // Actions Vendeuse (Modifier / Supprimer)
+      let sellerControls = '';
+      if (isSeller) {
+        // Échapper le titre pour le passer proprement dans l'attribut HTML
+        const safeTitle = (p.title || 'Article').replace(/'/g, "\\'");
+        sellerControls = `
+          <div style="display:flex; gap:0.4rem; margin-top:0.5rem; border-top:1px solid #eee; padding-top:0.5rem;">
+            <button onclick="editProduct('${id}', '${safeTitle}', ${p.price || 0})" style="flex:1; background:#3b82f6; color:white; border:none; padding:0.4rem; border-radius:4px; font-size:0.75rem; cursor:pointer;">
+              <i class="fa-solid fa-pen"></i> Modifier
+            </button>
+            <button onclick="deleteProduct('${id}')" style="flex:1; background:#dc2626; color:white; border:none; padding:0.4rem; border-radius:4px; font-size:0.75rem; cursor:pointer;">
+              <i class="fa-solid fa-trash"></i> Supprimer
+            </button>
+          </div>
+        `;
+      }
+
       card.innerHTML = `
         <div class="product-image">
           <img src="${imageUrl}" alt="${p.title || 'Article'}">
@@ -131,6 +154,7 @@ async function loadCatalog() {
           <h3 class="product-title" style="margin: 0.5rem 0 0.2rem 0; font-size: 1rem;">${p.title || 'Article'}</h3>
           <p class="product-price" style="color: #d97706; font-weight: bold; font-size: 0.95rem; margin-bottom: 0.8rem;">${p.price ? p.price.toLocaleString('fr-FR') : 0} XAF</p>
           ${buttonHtml}
+          ${sellerControls}
         </div>
       `;
       productList.appendChild(card);
@@ -139,6 +163,43 @@ async function loadCatalog() {
     console.error("Erreur catalogue :", err);
   }
 }
+
+// --- MODIFIER / SUPPRIMER ARTICLE (VENDEUSE) ---
+window.editProduct = function(id, oldTitle, oldPrice) {
+  const newTitle = prompt("Nouveau nom de l'article :", oldTitle);
+  if (newTitle === null) return; // Annulé
+
+  const newPriceStr = prompt("Nouveau prix (XAF) :", oldPrice);
+  if (newPriceStr === null) return; // Annulé
+
+  const newPrice = parseInt(newPriceStr, 10);
+  if (!newTitle.trim() || isNaN(newPrice)) {
+    alert("Veuillez saisir des informations valides.");
+    return;
+  }
+
+  db.collection('products').doc(id).update({
+    title: newTitle.trim(),
+    price: newPrice
+  }).then(() => {
+    alert("Article mis à jour avec succès !");
+    loadCatalog();
+  }).catch((err) => {
+    alert("Erreur de modification : " + err.message);
+  });
+};
+
+window.deleteProduct = async function(id) {
+  if (!confirm("Voulez-vous vraiment supprimer cet article de la boutique ?")) return;
+
+  try {
+    await db.collection('products').doc(id).delete();
+    alert("Article supprimé.");
+    loadCatalog();
+  } catch (err) {
+    alert("Erreur lors de la suppression : " + err.message);
+  }
+};
 
 window.reserveProduct = async function(productId) {
   const user = firebase.auth().currentUser;
@@ -154,7 +215,6 @@ window.reserveProduct = async function(productId) {
     const doc = await db.collection('products').doc(productId).get();
     const productData = doc.data();
 
-    // Mettre à jour Firebase
     await db.collection('products').doc(productId).update({
       isReserved: true,
       reservedBy: user.uid,
@@ -168,7 +228,6 @@ window.reserveProduct = async function(productId) {
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
 
-    // Envoi sur WhatsApp
     const clientName = user.email.replace('@destieshop.local', '');
     const textMsg = `Bonjour Destie Shop ! Je souhaite réserver l'article : *${productData.title}* (${productData.price} XAF).\nMon contact : ${clientName}`;
     const waUrl = `https://wa.me/${VENDEUSE_PHONE}?text=${encodeURIComponent(textMsg)}`;
@@ -183,7 +242,7 @@ window.reserveProduct = async function(productId) {
 
 // 1. Vendeuse marque l'article comme VENDU
 window.markAsSold = async function(productId) {
-  if (!confirm("Confirmer la vente de cet article ? Il sera définitivement marqué comme VENDU.")) return;
+  if (!confirm("Confirmer la vente de cet article ? Il sera définitivement marqué comme VENDU et passera dans les Achats du client.")) return;
 
   try {
     await db.collection('products').doc(productId).update({
@@ -191,8 +250,8 @@ window.markAsSold = async function(productId) {
       isReserved: false
     });
 
-    alert("L'article est maintenant marqué comme VENDU !");
-    loadCatalog();
+    alert("Vente validée !");
+    loadReservationsView();
   } catch (err) {
     alert("Erreur : " + err.message);
   }
@@ -216,6 +275,7 @@ window.cancelReservation = async function(productId) {
   }
 };
 
+// --- ONGLET RÉSERVATIONS (Articles EN COURS de réservation) ---
 async function loadReservationsView() {
   const container = document.getElementById('app-content');
   const user = firebase.auth().currentUser;
@@ -223,7 +283,7 @@ async function loadReservationsView() {
   if (!user) {
     container.innerHTML = `
       <div style="text-align: center; padding: 3rem 1rem;">
-        <h3>Mes Réservations</h3>
+        <h3>Réservations</h3>
         <p style="color: #6b7280; margin-top: 0.5rem;">Connectez-vous pour voir vos réservations.</p>
         <button class="btn" style="margin-top: 1rem; background:#d97706; color:white; border:none; padding:0.5rem 1rem; border-radius:6px; cursor:pointer;" onclick="openLoginModal(false)">Se connecter</button>
       </div>
@@ -235,9 +295,11 @@ async function loadReservationsView() {
 
   try {
     const isSeller = user.email && user.email.trim().toLowerCase() === SELLER_EMAIL.toLowerCase();
+    
+    // On ne prend QUE les articles avec isReserved == true (et pas les VENDUS)
     let query = isSeller 
       ? db.collection('products').where('isReserved', '==', true)
-      : db.collection('products').where('reservedBy', '==', user.uid);
+      : db.collection('products').where('reservedBy', '==', user.uid).where('isReserved', '==', true);
 
     const snapshot = await query.get();
 
@@ -253,7 +315,7 @@ async function loadReservationsView() {
 
     let html = `
       <div style="padding: 1rem;">
-        <h3 style="margin-bottom: 1rem;">${isSeller ? 'Réservations en cours (Vendeuse)' : 'Mes Réservations'}</h3>
+        <h3 style="margin-bottom: 1rem;">${isSeller ? 'Réservations à traiter' : 'Mes Réservations en cours'}</h3>
         <div class="product-grid">
     `;
 
@@ -273,13 +335,15 @@ async function loadReservationsView() {
               <p style="font-size:0.85rem; color:#4b5563; margin:0.4rem 0;">Client : <strong>${clientContact}</strong></p>
               
               <button onclick="markAsSold('${id}')" style="width:100%; background:#10b981; color:white; border:none; padding:0.5rem; border-radius:5px; font-weight:bold; cursor:pointer; margin-top:0.3rem;">
-                <i class="fa-solid fa-check"></i> Valider la vente (VENDU)
+                <i class="fa-solid fa-check"></i> Valider la vente
               </button>
               
               <button onclick="cancelReservation('${id}')" style="width:100%; background:#ef4444; color:white; border:none; padding:0.5rem; border-radius:5px; font-weight:bold; cursor:pointer; margin-top:0.3rem;">
                 <i class="fa-solid fa-xmark"></i> Annuler la réservation
               </button>
-            ` : ''}
+            ` : `
+              <p style="font-size:0.8rem; color:#d97706; margin-top:0.4rem;">En attente de finalisation sur WhatsApp...</p>
+            `}
           </div>
         </div>
       `;
@@ -289,7 +353,78 @@ async function loadReservationsView() {
     container.innerHTML = html;
   } catch (err) {
     console.error("Erreur réservations :", err);
-    container.innerHTML = `<div style="padding:2rem; text-align:center;">Erreur lors du chargement des réservations.</div>`;
+    container.innerHTML = `<div style="padding:2rem; text-align:center;">Erreur lors du chargement.</div>`;
+  }
+}
+
+// --- NOUVEAU : ONGLET MES ACHATS (Articles Payés / Vendus) ---
+async function loadPurchasesView() {
+  const container = document.getElementById('app-content');
+  const user = firebase.auth().currentUser;
+
+  if (!user) {
+    container.innerHTML = `
+      <div style="text-align: center; padding: 3rem 1rem;">
+        <h3>Mes Achats</h3>
+        <p style="color: #6b7280; margin-top: 0.5rem;">Connectez-vous pour voir vos achats.</p>
+        <button class="btn" style="margin-top: 1rem; background:#d97706; color:white; border:none; padding:0.5rem 1rem; border-radius:6px; cursor:pointer;" onclick="openLoginModal(false)">Se connecter</button>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = `<div style="text-align:center; padding:2rem;">Chargement de vos achats...</div>`;
+
+  try {
+    const isSeller = user.email && user.email.trim().toLowerCase() === SELLER_EMAIL.toLowerCase();
+
+    // Filtre les articles VENDUS
+    let query = isSeller
+      ? db.collection('products').where('isSold', '==', true)
+      : db.collection('products').where('reservedBy', '==', user.uid).where('isSold', '==', true);
+
+    const snapshot = await query.get();
+
+    if (snapshot.empty) {
+      container.innerHTML = `
+        <div style="padding: 2rem; text-align: center;">
+          <i class="fa-solid fa-bag-shopping" style="font-size: 3rem; color: #d1d5db; margin-bottom: 1rem;"></i>
+          <h3>Historique des Achats</h3>
+          <p style="color: #6b7280; margin-top: 0.5rem;">Aucun achat réalisé pour l'instant.</p>
+        </div>
+      `;
+      return;
+    }
+
+    let html = `
+      <div style="padding: 1rem;">
+        <h3 style="margin-bottom: 1rem;">${isSeller ? 'Historique Global des Ventes' : 'Mes Achats Confirmés'}</h3>
+        <div class="product-grid">
+    `;
+
+    snapshot.forEach(doc => {
+      const p = doc.data();
+      const imageUrl = (p.images && p.images.length > 0) ? p.images[0] : 'https://via.placeholder.com/300';
+      const clientContact = (p.reservedByEmail || 'Client').replace('@destieshop.local', '');
+
+      html += `
+        <div class="product-card">
+          <div class="product-image"><img src="${imageUrl}"></div>
+          <div class="product-info" style="padding:0.8rem;">
+            <span class="badge" style="background:#fee2e2; color:#991b1b; padding:2px 6px; border-radius:4px; font-size:0.75rem; font-weight:bold;">ACHETÉ</span>
+            <h3 style="margin-top:0.3rem;">${p.title || 'Article'}</h3>
+            <p style="color:#d97706; font-weight:bold;">${p.price} XAF</p>
+            ${isSeller ? `<p style="font-size:0.8rem; color:#4b5563; margin-top:0.3rem;">Acheté par : <strong>${clientContact}</strong></p>` : ''}
+          </div>
+        </div>
+      `;
+    });
+
+    html += `</div></div>`;
+    container.innerHTML = html;
+  } catch (err) {
+    console.error("Erreur achats :", err);
+    container.innerHTML = `<div style="padding:2rem; text-align:center;">Erreur lors du chargement des achats.</div>`;
   }
 }
 
@@ -304,7 +439,6 @@ async function loadProfileView() {
     let sellerStatsHtml = '';
     if (isSeller) {
       try {
-        // Récupérer le nombre total d'utilisateurs inscrits (abonnés)
         const usersSnap = await db.collection('users').get();
         const totalUsers = usersSnap.size;
 
@@ -398,7 +532,6 @@ window.submitAuth = function(isSignup) {
   if (isSignup) {
     firebase.auth().createUserWithEmailAndPassword(email, pass)
       .then(async (cred) => {
-        // Enregistrer l'utilisateur dans Firestore pour le compteur d'abonnés
         await db.collection('users').doc(cred.user.uid).set({
           email: email,
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
