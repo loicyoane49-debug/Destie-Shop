@@ -5,13 +5,24 @@ document.addEventListener('DOMContentLoaded', () => {
   loadCatalog();
   setupAuthListener();
 });
-
 function setupAuthListener() {
   if (typeof firebase === 'undefined' || !firebase.auth) return;
 
-  firebase.auth().onAuthStateChanged((user) => {
+  firebase.auth().onAuthStateChanged(async (user) => {
     const headerActions = document.getElementById('header-actions');
     if (!headerActions) return;
+
+    if (user) {
+      // Enregistrer / mettre à jour l'utilisateur dans Firestore automatiquement
+      try {
+        await db.collection('users').doc(user.uid).set({
+          email: user.email,
+          lastLogin: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+      } catch (e) {
+        console.error("Erreur enregistrement user :", e);
+      }
+    }
 
     const isSeller = user && user.email && user.email.trim().toLowerCase() === SELLER_EMAIL.toLowerCase();
 
@@ -31,6 +42,8 @@ function setupAuthListener() {
     }
   });
 }
+
+
 
 window.switchView = function(viewName) {
   const container = document.getElementById('app-content');
