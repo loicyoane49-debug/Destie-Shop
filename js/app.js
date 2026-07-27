@@ -70,7 +70,7 @@ async function loadCatalog() {
         <div style="grid-column: 1/-1; text-align: center; padding: 3rem 1rem;">
           <i class="fa-solid fa-store" style="font-size: 3rem; color: #d1d5db; margin-bottom: 1rem;"></i>
           <h3 style="color: #4b5563;">Le catalogue est vide</h3>
-          <p style="color: #9ca3af; font-size: 0.9rem; margin-top: 0.5rem;">Aucun vêtement pour le moment.</p>
+          <p style="color: #9ca3af; font-size: 0.9rem; margin-top: 0.5rem;">Aucun article pour le moment.</p>
         </div>
       `;
       return;
@@ -78,6 +78,7 @@ async function loadCatalog() {
 
     snapshot.forEach((doc) => {
       const p = doc.data();
+      const id = doc.id;
       const imageUrl = (p.images && p.images.length > 0) ? p.images[0] : 'https://via.placeholder.com/300';
 
       const card = document.createElement('div');
@@ -86,12 +87,22 @@ async function loadCatalog() {
         <div class="product-image">
           <img src="${imageUrl}" alt="${p.title || 'Article'}">
         </div>
-        <div class="product-info">
-          <span class="badge" style="background:#d1fae5; color:#065f46; padding:2px 6px; border-radius:4px; font-size:0.75rem;">
-            ${p.isReserved ? 'Réservé' : 'Disponible'}
+        <div class="product-info" style="padding: 0.8rem;">
+          <span class="badge" style="background:${p.isReserved ? '#fee2e2' : '#d1fae5'}; color:${p.isReserved ? '#991b1b' : '#065f46'}; padding:2px 6px; border-radius:4px; font-size:0.75rem;">
+            ${p.isReserved ? 'Déjà réservé' : 'Disponible'}
           </span>
-          <h3 class="product-title">${p.title || 'Article'}</h3>
-          <p class="product-price">${p.price ? p.price.toLocaleString('fr-FR') : 0} XAF</p>
+          <h3 class="product-title" style="margin: 0.5rem 0 0.2rem 0; font-size: 1rem;">${p.title || 'Article'}</h3>
+          <p class="product-price" style="color: #d97706; font-weight: bold; font-size: 0.95rem; margin-bottom: 0.8rem;">${p.price ? p.price.toLocaleString('fr-FR') : 0} XAF</p>
+          
+          ${!p.isReserved ? `
+            <button onclick="reserveProduct('${id}')" style="width: 100%; background: #d97706; color: white; border: none; padding: 0.6rem; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 0.85rem;">
+              <i class="fa-solid fa-bookmark"></i> Réserver
+            </button>
+          ` : `
+            <button disabled style="width: 100%; background: #9ca3af; color: white; border: none; padding: 0.6rem; border-radius: 6px; font-weight: bold; cursor: not-allowed; font-size: 0.85rem;">
+              Non disponible
+            </button>
+          `}
         </div>
       `;
       productList.appendChild(card);
@@ -101,21 +112,105 @@ async function loadCatalog() {
     productList.innerHTML = `
       <div style="grid-column: 1/-1; text-align: center; padding: 3rem 1rem;">
         <i class="fa-solid fa-store" style="font-size: 3rem; color: #d1d5db; margin-bottom: 1rem;"></i>
-        <h3 style="color: #4b5563;">Le catalogue est vide</h3>
-        <p style="color: #9ca3af; font-size: 0.9rem; margin-top: 0.5rem;">Aucun vêtement pour le moment.</p>
+        <h3 style="color: #4b5563;">Erreur de chargement du catalogue</h3>
       </div>
     `;
   }
 }
 
-function loadReservationsView() {
+window.reserveProduct = async function(productId) {
+  const user = firebase.auth().currentUser;
+  if (!user) {
+    alert("Veuillez vous connecter pour réserver cet article.");
+    openLoginModal(false);
+    return;
+  }
+
+  if (!confirm("Voulez-vous vraiment réserver cet article ?")) return;
+
+  try {
+    await db.collection('products').doc(productId).update({
+      isReserved: true,
+      reservedBy: user.uid,
+      reservedByEmail: user.email
+    });
+
+    await db.collection('reservations').add({
+      productId: productId,
+      userId: user.uid,
+      userEmail: user.email,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    alert("Article réservé avec succès ! Retrouvez vos réservations dans le menu du bas.");
+    loadCatalog();
+  } catch (err) {
+    alert("Erreur lors de la réservation : " + err.message);
+  }
+};
+
+async function loadReservationsView() {
   const container = document.getElementById('app-content');
-  container.innerHTML = `
-    <div style="padding: 2rem; text-align: center;">
-      <h3>Mes Réservations</h3>
-      <p style="color: #6b7280; margin-top: 0.5rem;">Aucune réservation enregistrée.</p>
-    </div>
-  `;
+  const user = firebase.auth().currentUser;
+
+  if (!user) {
+    container.innerHTML = `
+      <div style="text-align: center; padding: 3rem 1rem;">
+        <h3>Mes Réservations</h3>
+        <p style="color: #6b7280; margin-top: 0.5rem;">Connectez-vous pour voir vos réservations.</p>
+        <button class="btn" style="margin-top: 1rem; background:#d97706; color:white; border:none; padding:0.5rem 1rem; border-radius:6px; cursor:pointer;" onclick="openLoginModal(false)">Se connecter</button>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = `<div style="text-align:center; padding:2rem;">Chargement des réservations...</div>`;
+
+  try {
+    const isSeller = user.email && user.email.trim().toLowerCase() === SELLER_EMAIL.toLowerCase();
+    let query = isSeller 
+      ? db.collection('products').where('isReserved', '==', true)
+      : db.collection('products').where('reservedBy', '==', user.uid);
+
+    const snapshot = await query.get();
+
+    if (snapshot.empty) {
+      container.innerHTML = `
+        <div style="padding: 2rem; text-align: center;">
+          <h3>Mes Réservations</h3>
+          <p style="color: #6b7280; margin-top: 0.5rem;">Aucune réservation enregistrée pour le moment.</p>
+        </div>
+      `;
+      return;
+    }
+
+    let html = `
+      <div style="padding: 1rem;">
+        <h3 style="margin-bottom: 1rem;">${isSeller ? 'Toutes les réservations (Vendeuse)' : 'Mes Réservations'}</h3>
+        <div class="product-grid">
+    `;
+
+    snapshot.forEach(doc => {
+      const p = doc.data();
+      const imageUrl = (p.images && p.images.length > 0) ? p.images[0] : 'https://via.placeholder.com/300';
+      html += `
+        <div class="product-card">
+          <div class="product-image"><img src="${imageUrl}"></div>
+          <div class="product-info" style="padding:0.8rem;">
+            <h3>${p.title || 'Article'}</h3>
+            <p style="color:#d97706; font-weight:bold;">${p.price} XAF</p>
+            ${isSeller ? `<p style="font-size:0.8rem; color:#4b5563; margin-top:0.3rem;">Réservé par : <strong>${p.reservedByEmail || 'Client'}</strong></p>` : ''}
+          </div>
+        </div>
+      `;
+    });
+
+    html += `</div></div>`;
+    container.innerHTML = html;
+  } catch (err) {
+    console.error("Erreur réservations :", err);
+    container.innerHTML = `<div style="padding:2rem; text-align:center;">Erreur lors du chargement des réservations.</div>`;
+  }
 }
 
 function loadProfileView() {
@@ -126,8 +221,8 @@ function loadProfileView() {
     container.innerHTML = `
       <div style="padding: 1.5rem; background: white; border-radius: 8px; margin: 1rem;">
         <h3 style="margin-bottom: 0.5rem;">Mon Profil</h3>
-        <p style="color: #4b5563;">Connecté en tant que : <strong>${user.email}</strong></p>
-        <button class="btn btn-secondary" style="margin-top: 1.5rem;" onclick="logout()">Déconnexion</button>
+        <p style="color: #4b5563;">Identifiant / Contact : <strong>${user.email}</strong></p>
+        <button class="btn btn-secondary" style="margin-top: 1.5rem; background:#4b5563; color:white; border:none; padding:0.5rem 1rem; border-radius:6px; cursor:pointer;" onclick="logout()">Déconnexion</button>
       </div>
     `;
   } else {
@@ -135,7 +230,7 @@ function loadProfileView() {
       <div style="text-align: center; padding: 3rem 1rem;">
         <h3>Mon Profil</h3>
         <p style="color: #6b7280; margin-top: 0.5rem;">Vous n'êtes pas connecté.</p>
-        <button class="btn" style="margin-top: 1rem;" onclick="openLoginModal(false)">Se connecter</button>
+        <button class="btn" style="margin-top: 1rem; background:#d97706; color:white; border:none; padding:0.5rem 1rem; border-radius:6px; cursor:pointer;" onclick="openLoginModal(false)">Se connecter</button>
       </div>
     `;
   }
@@ -154,8 +249,8 @@ window.openLoginModal = function(isSignup = false) {
       <div style="background: #1f2937; color: white; padding: 1.5rem; border-radius: 8px; width: 100%; max-width: 350px;">
         <h3 style="margin-bottom: 1rem; color: #f59e0b;">${isSignup ? 'Créer un compte Client' : 'Connexion'}</h3>
         
-        <label style="display:block; font-size:0.85rem; margin-bottom: 0.25rem;">Email</label>
-        <input type="email" id="auth-email" placeholder="votre@email.com" style="width:100%; padding: 0.5rem; margin-bottom: 1rem; border-radius:4px; border:1px solid #4b5563; background:#374151; color:white;">
+        <label style="display:block; font-size:0.85rem; margin-bottom: 0.25rem;">Numéro de téléphone ou Email</label>
+        <input type="text" id="auth-email" placeholder="ex: 061234567" style="width:100%; padding: 0.5rem; margin-bottom: 1rem; border-radius:4px; border:1px solid #4b5563; background:#374151; color:white;">
         
         <label style="display:block; font-size:0.85rem; margin-bottom: 0.25rem;">Mot de passe</label>
         <input type="password" id="auth-pass" placeholder="••••••••" style="width:100%; padding: 0.5rem; margin-bottom: 1rem; border-radius:4px; border:1px solid #4b5563; background:#374151; color:white;">
@@ -181,13 +276,20 @@ window.openLoginModal = function(isSignup = false) {
 };
 
 window.submitAuth = function(isSignup) {
-  const email = document.getElementById('auth-email').value.trim();
+  let inputVal = document.getElementById('auth-email').value.trim();
   const pass = document.getElementById('auth-pass').value;
   const errDiv = document.getElementById('auth-error');
 
-  if (!email || !pass) {
+  if (!inputVal || !pass) {
     errDiv.textContent = "Veuillez remplir tous les champs.";
     return;
+  }
+
+  // Si l'utilisateur entre un simple numéro, on le formate en faux email Firebase
+  let email = inputVal;
+  if (!inputVal.includes('@')) {
+    const cleanPhone = inputVal.replace(/\D/g, '');
+    email = `${cleanPhone}@destieshop.local`;
   }
 
   errDiv.textContent = "Vérification...";
